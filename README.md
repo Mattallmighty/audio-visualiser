@@ -1,4 +1,4 @@
-# YZ Audio Visualiser
+# Audio Visualiser
 
 [![original author](https://img.shields.io/badge/ORIGINAL_AUTHOR-mattallmighty-purple.svg?logo=github&logoColor=white)](https://github.com/mattallmighty) [![refactored by](https://img.shields.io/badge/REFACTORED_BY-Blade-darkred.svg?logo=github&logoColor=white)](https://github.com/YeonV)
 
@@ -13,7 +13,7 @@ A powerful, dual-mode audio visualisation component with real-time WebGL effects
 This visualizer supports two distinct modes:
 
 ### 🎤 Standalone Mode (Microphone)
-- **[Try it live on GitHub Pages](https://yeonv.github.io/audio-visualiser/)** *(coming soon)*
+- **[Try it live on GitHub Pages](https://yeonv.github.io/audio-visualiser/)**
 - Real-time microphone input with Web Audio API
 - No backend dependencies required
 - Perfect for demos, presentations, or standalone exploration
@@ -58,7 +58,7 @@ This repo provides mattallmighty with:
 ### Mode 1: Standalone (GitHub Pages Demo)
 
 Experience the visualizer with your microphone:
-**[Launch Standalone Demo →](https://yeonv.github.io/audio-visualiser/)** *(coming soon)*
+**[Launch Standalone Demo →](https://yeonv.github.io/audio-visualiser/)**
 
 No installation needed - just grant microphone access and enjoy!
 
