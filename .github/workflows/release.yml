@@ -31,12 +31,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: 'yarn'
 
       - name: Install dependencies
-        run: npm install
+        run: yarn install --frozen-lockfile
 
       - name: Build module
-        run: npm run build
+        run: yarn build
 
       - name: Create release archive
         run: |

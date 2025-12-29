@@ -31,7 +31,7 @@ const libraryConfig: UserConfig = {
       entry: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
       name: 'YzAudioVisualiser',
       formats: ['iife'],
-      fileName: () => 'yz-audio-visualiser'
+      fileName: () => 'yz-audio-visualiser.js'
     },
     rollupOptions: {
       external: ['react', 'react-dom'],

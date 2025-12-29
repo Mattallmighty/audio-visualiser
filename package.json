@@ -1,7 +1,7 @@
 {
   "name": "@yeonv/yz-audio-visualiser",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
   "main": "./dist/yz-audio-visualiser.umd.js",
   "module": "./dist/yz-audio-visualiser.es.js",
