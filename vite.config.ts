@@ -14,7 +14,9 @@ const libraryConfig: UserConfig = {
     react(),
     dts({
       rollupTypes: true,
-      tsconfigPath: './tsconfig.app.json'
+      tsconfigPath: './tsconfig.app.json',
+      outDir: 'dist',
+      entryRoot: 'src'
     })
   ],
   define: { 'process.env.NODE_ENV': JSON.stringify('production') },
@@ -29,7 +31,7 @@ const libraryConfig: UserConfig = {
       entry: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
       name: 'YzAudioVisualiser',
       formats: ['iife'],
-      fileName: () => 'yz-audio-visualiser.js'
+      fileName: () => 'yz-audio-visualiser'
     },
     rollupOptions: {
       external: ['react', 'react-dom'],
