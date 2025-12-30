@@ -31,8 +31,11 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.2.0",
     "@mui/material": "^7.2.0",
+    "butterchurn": "^2.6.7",
+    "butterchurn-presets": "^2.4.7",
     "meyda": "^5.6.2",
-    "react-full-screen": "^1.1.1"
+    "react-full-screen": "^1.1.1",
+    "realtime-bpm-analyzer": "^5.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
@@ -56,5 +59,6 @@
   "peerDependencies": {
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
-  }
+  },
+  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f"
 }

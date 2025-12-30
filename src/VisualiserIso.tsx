@@ -24,7 +24,11 @@ import {
   TableRow,
   Theme,
   ThemeProvider,
-  createTheme
+  createTheme,
+  LinearProgress,
+  Snackbar,
+  Alert,
+  Divider
 } from '@mui/material'
 import {
   Fullscreen,
@@ -35,12 +39,15 @@ import {
   Mic,
   Cloud,
   AutoAwesome,
-  MusicNote
+  MusicNote,
+  AutoFixHigh
 } from '@mui/icons-material'
 import { FullScreen, useFullScreenHandle } from 'react-full-screen'
 import WebGLVisualiser, { WebGLVisualisationType } from './WebGLVisualiser'
+import ButterchurnVisualiser, { ButterchurnConfig } from './ButterchurnVisualiser'
+import AstrofoxVisualiser, { AstrofoxConfig, DEFAULT_ASTROFOX_CONFIG, ASTROFOX_PRESETS, getAstrofoxPresetLayers, AstrofoxVisualiserRef } from './AstrofoxVisualiser'
 import { gifFragmentShader } from './shaders'
-import useAudioAnalyser from './useAudioAnalyser'
+import useAudioAnalyser from './audioanalyzer/useAudioAnalyser'
 import {
   DEFAULT_CONFIGS,
   orderEffectProperties,
@@ -48,6 +55,8 @@ import {
   VISUALISER_SCHEMAS
 } from './visualizerConstants'
 import SimpleConfigForm from './SimpleConfigForm'
+import { usePostProcessing, PostProcessingConfig } from './usePostProcessing'
+import { PostProcessingPanel } from './PostProcessingPanel'
 
 interface VisualiserIsoProps {
   theme: Theme
@@ -56,6 +65,8 @@ interface VisualiserIsoProps {
   ConfigFormComponent?: React.ComponentType<any>
   onClose?: () => void
 }
+
+const STORAGE_KEY = 'visualiser_state_v1'
 
 const VisualiserIso = ({
   theme,
@@ -69,20 +80,45 @@ const VisualiserIso = ({
   // Check if backend is available
   const hasBackend = backendAudioData !== undefined
 
+  // Load saved state from localStorage
+  const getSavedState = useCallback(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      return saved ? JSON.parse(saved) : null
+    } catch (e) {
+      console.warn('Failed to load state from localStorage', e)
+      return null
+    }
+  }, [])
+
+  const savedState = getSavedState()
+
   // Audio Analyser (Mic)
   const {
     data: micData,
     startListening,
     stopListening,
     isListening,
-    error: micError
+    error: micError,
+    tapTempo,
+    getStream
   } = useAudioAnalyser()
 
   // Local state
-  const [isPlaying, setIsPlaying] = useState(hasBackend) // Only auto-play if backend available
+  const [isPlaying, setIsPlaying] = useState(true) // Default to playing for auto-start
   const [fullScreen, setFullScreen] = useState(false)
-  const [visualType, setVisualType] = useState<WebGLVisualisationType>('gif')
-  const [config, setConfig] = useState<Record<string, any>>(DEFAULT_CONFIGS.gif)
+  const [visualType, setVisualType] = useState<WebGLVisualisationType>(savedState?.visualType || 'gif')
+  
+  // Store custom configs for ALL visualiser types in one object
+  const [allConfigs, setAllConfigs] = useState<Record<string, any>>(() => {
+    const initial = { ...DEFAULT_CONFIGS }
+    if (savedState?.allConfigs) {
+      Object.assign(initial, savedState.allConfigs)
+    } else if (savedState?.savedConfigs) {
+      Object.assign(initial, savedState.savedConfigs)
+    }
+    return initial
+  })
 
   // Audio source state
   const [audioSource, setAudioSource] = useState<'backend' | 'mic'>(hasBackend ? 'backend' : 'mic')
@@ -92,6 +128,109 @@ const VisualiserIso = ({
   const [showCode, setShowCode] = useState(false)
   const [shaderCode, setShaderCode] = useState(gifFragmentShader)
   const [activeCustomShader, setActiveCustomShader] = useState<string | undefined>(undefined)
+
+  // Post-processing state - FX enabled by default with nice defaults
+  const [fxEnabled, setFxEnabled] = useState(savedState?.fxEnabled ?? false)
+  const [showFxPanel, setShowFxPanel] = useState(false)
+  const [glContext, setGlContext] = useState<WebGLRenderingContext | null>(null)
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 })
+  const [ppConfig, setPpConfig] = useState<PostProcessingConfig>(savedState?.ppConfig || {
+    // Default: Kaleidoscope with smooth rotation, bloom, and vignette
+    kaleidoscope: { enabled: true, sides: 6, angle: 0, rotationSpeed: 0.3, beatSync: true, beatAmount: 0.5 },
+    bloom: { enabled: true, threshold: 0.3, intensity: 0.8, radius: 5 },
+    vignette: { enabled: true, radius: 0.7, softness: 0.5, intensity: 0.5 }
+  })
+
+  // Butterchurn state
+  const [butterchurnConfig, setButterchurnConfig] = useState<ButterchurnConfig>(savedState?.butterchurnConfig || {
+    cycleInterval: 25,
+    blendTime: 2.7,
+    shufflePresets: false,
+    currentPresetIndex: 0
+  })
+
+  // Astrofox state
+  const [astrofoxConfig, setAstrofoxConfig] = useState<AstrofoxConfig>(savedState?.astrofoxConfig || DEFAULT_ASTROFOX_CONFIG)
+  const [astrofoxReady, setAstrofoxReady] = useState(false)
+
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Save state to localStorage
+  useEffect(() => {
+    const stateToSave = {
+      visualType,
+      allConfigs,
+      fxEnabled,
+      ppConfig,
+      butterchurnConfig,
+      astrofoxConfig
+    }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave))
+      setSaveError(null)
+    } catch (e: any) {
+      console.warn('Failed to save state to localStorage', e)
+      if (e.name === 'QuotaExceededError' || e.code === 22) {
+        setSaveError('Storage full! Some images may be too large to save.')
+      }
+    }
+  }, [visualType, allConfigs, fxEnabled, ppConfig, butterchurnConfig, astrofoxConfig])
+
+  // Post-processing hook
+  const [ppState, ppControls] = usePostProcessing(
+    fxEnabled ? glContext : null,
+    canvasSize.width,
+    canvasSize.height
+  )
+
+  // Auto-start microphone if isPlaying is true on mount
+  useEffect(() => {
+    if (isPlaying && audioSource === 'mic' && !isListening) {
+      startListening().catch(err => {
+        console.warn('Auto-start failed (likely due to browser policy):', err)
+        setIsPlaying(false) // Revert to paused if auto-start fails
+      })
+    }
+  }, []) // Run once on mount
+
+  // Handle WebGL context creation - only update if context actually changed
+  const glContextRef = useRef<WebGLRenderingContext | null>(null)
+  const astrofoxRef = useRef<AstrofoxVisualiserRef>(null)
+  const handleContextCreated = useCallback(
+    (gl: WebGLRenderingContext, canvas: HTMLCanvasElement) => {
+      // Only update state if context has actually changed
+      if (glContextRef.current !== gl) {
+        glContextRef.current = gl
+        setGlContext(gl)
+        setCanvasSize({ width: canvas.width, height: canvas.height })
+      }
+    },
+    []
+  )
+
+  // Apply post-processing config when it changes
+  const ppControlsRef = useRef(ppControls)
+  ppControlsRef.current = ppControls
+
+  useEffect(() => {
+    if (ppState.isInitialized) {
+      ppControlsRef.current.setConfig(ppConfig)
+    }
+  }, [ppConfig, ppState.isInitialized])
+
+  // Track when Astrofox ref is ready for rendering controls
+  useEffect(() => {
+    if (visualType === 'astrofox') {
+      // Small delay to ensure ref is assigned after render
+      const timer = setTimeout(() => setAstrofoxReady(true), 50)
+      return () => clearTimeout(timer)
+    } else {
+      setAstrofoxReady(false)
+    }
+  }, [visualType])
+
+  // Note: Auto-starting microphone is not possible - browsers require user gesture
+  // The user must click "Play" or the mic toggle to start microphone input
 
   const lastAutoChangeRef = useRef(0)
 
@@ -111,51 +250,55 @@ const VisualiserIso = ({
   }
 
   const handleEffectConfig = (newConfig: any) => {
-    setConfig((prev) => ({ ...prev, ...newConfig }))
+    setAllConfigs((prev) => ({
+      ...prev,
+      [visualType]: { ...prev[visualType], ...newConfig }
+    }))
   }
 
   const handleTypeChange = useCallback(
     (type: WebGLVisualisationType) => {
       setVisualType(type)
-
-      // Try to get defaults from backend schema if available
-      if (effects) {
-        const backendEffectType = VISUAL_TO_BACKEND_EFFECT[type]
-        const backendSchema = backendEffectType && effects[backendEffectType]?.schema
-
-        if (backendSchema?.properties) {
-          // Build config from backend schema defaults
-          const backendDefaults: Record<string, any> = {}
-          Object.keys(backendSchema.properties).forEach((key) => {
-            const prop = backendSchema.properties[key]
-            if (prop.default !== undefined) {
-              backendDefaults[key] = prop.default
-            }
-          })
-          // Merge with our local defaults (local takes precedence for visualiser-specific settings)
-          setConfig({ ...backendDefaults, ...(DEFAULT_CONFIGS[type] || {}), developer_mode: false })
-          setActiveCustomShader(undefined)
-          setShowCode(false)
-          return
-        }
-      }
-
-      // Fallback to local defaults (standalone mode)
-      setConfig(DEFAULT_CONFIGS[type] || {})
       setActiveCustomShader(undefined)
       setShowCode(false)
     },
-    [effects]
+    []
   )
 
   const handleApplyShader = () => {
     setActiveCustomShader(shaderCode)
   }
 
+  const handleReset = () => {
+    if (visualType === 'butterchurn') {
+      setButterchurnConfig({
+        cycleInterval: 25,
+        blendTime: 2.7,
+        shufflePresets: false,
+        currentPresetIndex: 0
+      })
+    } else if (visualType === 'astrofox') {
+      setAstrofoxConfig(DEFAULT_ASTROFOX_CONFIG)
+    } else {
+      setAllConfigs(prev => ({
+        ...prev,
+        [visualType]: DEFAULT_CONFIGS[visualType] || {}
+      }))
+    }
+  }
+
+  const handleResetAll = () => {
+    if (window.confirm('Are you sure you want to reset ALL settings and visualisers to default? This cannot be undone.')) {
+      localStorage.removeItem(STORAGE_KEY)
+      window.location.reload()
+    }
+  }
+
   const activeAudioData = audioSource === 'mic' ? micData.normalizedFrequency : (backendAudioData || [])
+  const config = allConfigs[visualType] || {}
   const beatData =
     audioSource === 'mic'
-      ? { isBeat: micData.isBeat, beatIntensity: micData.beatIntensity, bpm: micData.bpm }
+      ? { isBeat: micData.isBeat, beatIntensity: micData.beatIntensity, beatPhase: micData.beatPhase, bpm: micData.bpm }
       : undefined
 
   // Calculate frequency bands from backend audio data
@@ -256,7 +399,7 @@ const VisualiserIso = ({
     }
 
     prevBeatRef.current = micData.isBeat
-  })
+  }, [autoChange, isPlaying, audioSource, micData.isBeat, micData.beatIntensity, triggerRandomVisual])
 
   // Auto Change Logic - Random Timer for Backend
   useEffect(() => {
@@ -371,6 +514,14 @@ const VisualiserIso = ({
                     <MenuItem value="soap">Soap</MenuItem>
                     <MenuItem value="texter">Texter</MenuItem>
                     <MenuItem value="waterfall">Waterfall</MenuItem>
+                    <MenuItem disabled sx={{ opacity: 0.5, fontSize: '0.75rem', mt: 1 }}>
+                      Milkdrop
+                    </MenuItem>
+                    <MenuItem value="butterchurn">Butterchurn (Milkdrop)</MenuItem>
+                    <MenuItem disabled sx={{ opacity: 0.5, fontSize: '0.75rem', mt: 1 }}>
+                      Layer-Based
+                    </MenuItem>
+                    <MenuItem value="astrofox">Astrofox (Layers)</MenuItem>
                   </Select>
                 </FormControl>
 
@@ -400,6 +551,25 @@ const VisualiserIso = ({
                     color="primary"
                   >
                     <AutoAwesome sx={{ mr: 1 }} /> Auto
+                  </ToggleButton>
+                </Tooltip>
+
+                <Tooltip title="Post-processing effects">
+                  <ToggleButton
+                    value="fx"
+                    selected={fxEnabled}
+                    onChange={() => {
+                      const newValue = !fxEnabled
+                      setFxEnabled(newValue)
+                      // Auto-show panel when enabling FX
+                      if (newValue && !showFxPanel) {
+                        setShowFxPanel(true)
+                      }
+                    }}
+                    size="small"
+                    color="secondary"
+                  >
+                    <AutoFixHigh sx={{ mr: 1 }} /> FX
                   </ToggleButton>
                 </Tooltip>
 
@@ -467,16 +637,44 @@ const VisualiserIso = ({
                   }}
                   onDoubleClick={fullScreen ? fullscreenHandle.exit : fullscreenHandle.enter}
                 >
-                  <WebGLVisualiser
-                    theme={theme}
-                    audioData={activeAudioData}
-                    isPlaying={isPlaying}
-                    visualType={visualType}
-                    config={config}
-                    customShader={activeCustomShader}
-                    beatData={beatData}
-                    frequencyBands={frequencyBands}
-                  />
+                  {visualType === 'butterchurn' ? (
+                    <ButterchurnVisualiser
+                      audioData={activeAudioData}
+                      isPlaying={isPlaying}
+                      config={butterchurnConfig}
+                      onConfigChange={(update) =>
+                        setButterchurnConfig((prev) => ({ ...prev, ...update }))
+                      }
+                      showControls={true}
+                      audioStream={audioSource === 'mic' ? getStream() : undefined}
+                    />
+                  ) : visualType === 'astrofox' ? (
+                    <AstrofoxVisualiser
+                      ref={astrofoxRef}
+                      audioData={activeAudioData}
+                      isPlaying={isPlaying}
+                      config={astrofoxConfig}
+                      onConfigChange={(update) =>
+                        setAstrofoxConfig((prev) => ({ ...prev, ...update }))
+                      }
+                      frequencyBands={frequencyBands}
+                      beatData={beatData}
+                    />
+                  ) : (
+                    <WebGLVisualiser
+                      theme={theme}
+                      audioData={activeAudioData}
+                      isPlaying={isPlaying}
+                      visualType={visualType}
+                      config={config}
+                      customShader={activeCustomShader}
+                      beatData={beatData}
+                      frequencyBands={frequencyBands}
+                      onContextCreated={handleContextCreated}
+                      postProcessing={ppControls}
+                      postProcessingEnabled={fxEnabled && ppState.isInitialized}
+                    />
+                  )}
 
                   {/* Debug Overlay */}
                   {config.developer_mode && audioSource === 'mic' && (
@@ -609,14 +807,21 @@ const VisualiserIso = ({
               sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}
             >
               <Typography variant="h6">Configuration</Typography>
-              <Tooltip title="Edit Shader">
-                <IconButton
-                  onClick={() => setShowCode(!showCode)}
-                  color={showCode ? 'primary' : 'default'}
-                >
-                  <Code />
-                </IconButton>
-              </Tooltip>
+              <Box>
+                <Tooltip title="Reset to Defaults">
+                  <Button size="small" onClick={handleReset} sx={{ mr: 1 }}>
+                    Reset
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Edit Shader">
+                  <IconButton
+                    onClick={() => setShowCode(!showCode)}
+                    color={showCode ? 'primary' : 'default'}
+                  >
+                    <Code />
+                  </IconButton>
+                </Tooltip>
+              </Box>
             </Box>
 
             {showCode ? (
@@ -635,6 +840,143 @@ const VisualiserIso = ({
                 <Button variant="contained" onClick={handleApplyShader} fullWidth>
                   Apply Shader
                 </Button>
+              </Box>
+            ) : visualType === 'butterchurn' ? (
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 2 }}>
+                  Preset Cycling
+                </Typography>
+
+                <Box sx={{ mb: 3 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="body2">Cycle Interval</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {butterchurnConfig.cycleInterval === 0 ? 'Off' : `${butterchurnConfig.cycleInterval}s`}
+                    </Typography>
+                  </Box>
+                  <input
+                    type="range"
+                    min="0"
+                    max="120"
+                    step="5"
+                    value={butterchurnConfig.cycleInterval}
+                    onChange={(e) =>
+                      setButterchurnConfig((prev) => ({
+                        ...prev,
+                        cycleInterval: Number(e.target.value)
+                      }))
+                    }
+                    style={{ width: '100%' }}
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    Time between automatic preset changes (0 = disabled)
+                  </Typography>
+                </Box>
+
+                <Box sx={{ mb: 3 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="body2">Blend Time</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {butterchurnConfig.blendTime}s
+                    </Typography>
+                  </Box>
+                  <input
+                    type="range"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    value={butterchurnConfig.blendTime}
+                    onChange={(e) =>
+                      setButterchurnConfig((prev) => ({
+                        ...prev,
+                        blendTime: Number(e.target.value)
+                      }))
+                    }
+                    style={{ width: '100%' }}
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    Transition duration when switching presets
+                  </Typography>
+                </Box>
+
+                <Box sx={{ mb: 2 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={butterchurnConfig.shufflePresets}
+                      onChange={(e) =>
+                        setButterchurnConfig((prev) => ({
+                          ...prev,
+                          shufflePresets: e.target.checked
+                        }))
+                      }
+                    />
+                    <Typography variant="body2">Shuffle Presets</Typography>
+                  </label>
+                  <Typography variant="caption" color="text.secondary" sx={{ pl: 3.5 }}>
+                    Randomize preset order when cycling
+                  </Typography>
+                </Box>
+
+                <Divider sx={{ my: 2 }} />
+
+                <Typography variant="caption" color="text.secondary">
+                  Use the controls on the visualizer to manually switch presets, or adjust the cycle interval above for automatic changes.
+                </Typography>
+              </Box>
+            ) : visualType === 'astrofox' ? (
+              <Box>
+                {/* Quick Presets */}
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Quick Presets
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                  {ASTROFOX_PRESETS.map((preset) => (
+                    <Button
+                      key={preset}
+                      variant="outlined"
+                      size="small"
+                      onClick={() =>
+                        setAstrofoxConfig((prev) => ({
+                          ...prev,
+                          layers: getAstrofoxPresetLayers(preset)
+                        }))
+                      }
+                      sx={{ textTransform: 'capitalize' }}
+                    >
+                      {preset}
+                    </Button>
+                  ))}
+                </Box>
+
+                {/* Background Color */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                  <Typography variant="body2">Background:</Typography>
+                  <input
+                    type="color"
+                    value={astrofoxConfig.backgroundColor}
+                    onChange={(e) =>
+                      setAstrofoxConfig((prev) => ({
+                        ...prev,
+                        backgroundColor: e.target.value
+                      }))
+                    }
+                    style={{ width: 40, height: 30, cursor: 'pointer', border: 'none' }}
+                  />
+                  <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
+                    {astrofoxConfig.backgroundColor}
+                  </Typography>
+                </Box>
+
+                <Divider sx={{ my: 2 }} />
+
+                {/* Full Layer Controls from Astrofox component */}
+                {astrofoxReady && astrofoxRef.current?.renderControls()}
+                {!astrofoxReady && (
+                  <Typography variant="caption" color="text.secondary">
+                    Loading layer controls...
+                  </Typography>
+                )}
               </Box>
             ) : (
               (() => {
@@ -667,6 +1009,50 @@ const VisualiserIso = ({
                 return <SimpleConfigForm config={config} onChange={handleEffectConfig} />
               })()
             )}
+
+            {/* FX Panel - Collapsible */}
+            {fxEnabled && (
+              <Box sx={{ mt: 3, borderTop: 1, borderColor: 'divider', pt: 2 }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mb: 1,
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => setShowFxPanel(!showFxPanel)}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                  >
+                    <AutoFixHigh fontSize="small" color="secondary" />
+                    Post-Processing Effects
+                    {ppState.enabledEffects.length > 0 && (
+                      <Typography component="span" variant="caption" color="text.secondary">
+                        ({ppState.enabledEffects.length} active)
+                      </Typography>
+                    )}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {showFxPanel ? '▲' : '▼'}
+                  </Typography>
+                </Box>
+
+                {showFxPanel && (
+                  <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+                    <PostProcessingPanel
+                      config={ppConfig}
+                      onChange={(newConfig) =>
+                        setPpConfig((prev) => ({ ...prev, ...newConfig }))
+                      }
+                      enabledEffects={ppState.enabledEffects}
+                    />
+                  </Box>
+                )}
+              </Box>
+            )}
           </CardContent>
         </Card>
       </Grid>
@@ -688,11 +1074,14 @@ const VisualiserIso = ({
               </Button>
               <Button
                 onClick={() =>
-                  setConfig((prev) => ({
+                  setAllConfigs((prev) => ({
                     ...prev,
-                    sensitivity: 2.5,
-                    brightness: 1.2,
-                    smoothing: 0.2
+                    [visualType]: {
+                      ...prev[visualType],
+                      sensitivity: 2.5,
+                      brightness: 1.2,
+                      smoothing: 0.2
+                    }
                   }))
                 }
                 variant="outlined"
@@ -703,7 +1092,15 @@ const VisualiserIso = ({
               </Button>
               <Button
                 onClick={() =>
-                  setConfig((prev) => ({ ...prev, sensitivity: 0.8, smoothing: 0.9, speed: 0.5 }))
+                  setAllConfigs((prev) => ({
+                    ...prev,
+                    [visualType]: {
+                      ...prev[visualType],
+                      sensitivity: 0.8,
+                      smoothing: 0.9,
+                      speed: 0.5
+                    }
+                  }))
                 }
                 variant="outlined"
                 fullWidth
@@ -715,33 +1112,225 @@ const VisualiserIso = ({
 
             {audioSource === 'mic' && (
               <Box sx={{ mt: 3, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
-                <Typography variant="caption" display="block" gutterBottom>
+                <Typography variant="caption" display="block" gutterBottom sx={{ fontWeight: 'bold', mb: 1.5 }}>
                   AUDIO STATS
                 </Typography>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="caption">BPM</Typography>
-                  <Typography variant="caption" fontWeight="bold">
-                    {micData.bpm}
-                  </Typography>
+
+                {/* BPM with confidence */}
+                <Box sx={{ mb: 1.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                    <Typography variant="caption">BPM</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="caption" fontWeight="bold" sx={{ color: 'primary.main' }}>
+                        {micData.bpm} <Typography component="span" variant="caption" sx={{ opacity: 0.7 }}>({Math.round(micData.confidence * 100)}%)</Typography>
+                      </Typography>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        sx={{
+                          minWidth: '30px',
+                          height: '20px',
+                          fontSize: '0.65rem',
+                          p: 0,
+                          lineHeight: 1
+                        }}
+                        onClick={tapTempo}
+                      >
+                        TAP
+                      </Button>
+                    </Box>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={micData.confidence * 100}
+                    sx={{ height: 4, borderRadius: 2, bgcolor: 'action.disabledBackground' }}
+                  />
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="caption">Confidence</Typography>
-                  <Typography variant="caption" fontWeight="bold">
-                    {Math.round(micData.confidence * 100)}%
-                  </Typography>
+
+                {/* Beat phase indicator */}
+                <Box sx={{ mb: 1.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                    <Typography variant="caption">Beat</Typography>
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      {[0, 0.25, 0.5, 0.75].map((threshold, i) => (
+                        <Box
+                          key={i}
+                          sx={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            bgcolor: micData.beatPhase >= threshold && micData.beatPhase < threshold + 0.25
+                              ? 'primary.main'
+                              : 'action.disabledBackground',
+                            transition: 'background-color 0.1s',
+                            boxShadow: micData.isBeat && micData.beatPhase >= threshold && micData.beatPhase < threshold + 0.25
+                              ? '0 0 8px currentColor'
+                              : 'none'
+                          }}
+                        />
+                      ))}
+                    </Box>
+                  </Box>
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="caption">Beat Intensity</Typography>
-                  <Typography variant="caption" fontWeight="bold">
-                    {micData.beatIntensity.toFixed(2)}
-                  </Typography>
+
+                {/* Buildup detection */}
+                <Box sx={{ mb: 1.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                    <Typography variant="caption">Buildup</Typography>
+                    <Typography variant="caption" fontWeight="bold" sx={{
+                      color: micData.isBuildUp ? 'warning.main' : 'text.secondary',
+                      textTransform: 'uppercase'
+                    }}>
+                      {micData.buildUpPhase} {micData.beatsToImpact > 0 && `(${micData.beatsToImpact})`}
+                    </Typography>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={micData.buildUpConfidence * 100}
+                    color={micData.isBuildUp ? 'warning' : 'primary'}
+                    sx={{ height: 4, borderRadius: 2, bgcolor: 'action.disabledBackground' }}
+                  />
+                </Box>
+
+                {/* Note/Key detection */}
+                <Box sx={{ mb: 1.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="caption">Note</Typography>
+                    <Typography variant="caption" fontWeight="bold" sx={{
+                      color: micData.noteConfidence > 0.3 ? 'secondary.main' : 'text.secondary',
+                      fontFamily: 'monospace'
+                    }}>
+                      {micData.dominantNote} {micData.noteConfidence > 0.3 && <Typography component="span" variant="caption" sx={{ opacity: 0.7 }}>({Math.round(micData.noteConfidence * 100)}%)</Typography>}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {/* Energy level */}
+                <Box sx={{ mb: 1.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                    <Typography variant="caption">Energy</Typography>
+                    <Typography variant="caption" fontWeight="bold" sx={{
+                      color: micData.energy > 0.7 ? 'error.main' : micData.energy > 0.4 ? 'warning.main' : 'success.main'
+                    }}>
+                      {Math.round(micData.energy * 100)}%
+                    </Typography>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={micData.energy * 100}
+                    color={micData.energy > 0.7 ? 'error' : micData.energy > 0.4 ? 'warning' : 'success'}
+                    sx={{ height: 4, borderRadius: 2, bgcolor: 'action.disabledBackground' }}
+                  />
+                </Box>
+
+                {/* Valence (positiveness) */}
+                <Box sx={{ mb: 1.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                    <Typography variant="caption">Valence</Typography>
+                    <Typography variant="caption" fontWeight="bold" sx={{
+                      color: micData.valence > 0.6 ? 'success.main' : micData.valence < 0.4 ? 'info.main' : 'text.secondary'
+                    }}>
+                      {Math.round(micData.valence * 100)}%
+                    </Typography>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={micData.valence * 100}
+                    color={micData.valence > 0.6 ? 'success' : micData.valence < 0.4 ? 'info' : 'primary'}
+                    sx={{ height: 4, borderRadius: 2, bgcolor: 'action.disabledBackground' }}
+                  />
+                </Box>
+
+                {/* Mood/Genre */}
+                <Box sx={{ mb: 1.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="caption">Mood</Typography>
+                    <Typography variant="caption" fontWeight="bold" sx={{
+                      color: micData.mood === 'intense' ? 'error.main'
+                        : micData.mood === 'upbeat' ? 'success.main'
+                        : micData.mood === 'driving' ? 'warning.main'
+                        : micData.mood === 'chill' ? 'info.main'
+                        : micData.mood === 'ambient' ? 'secondary.main'
+                        : 'text.secondary',
+                      textTransform: 'capitalize'
+                    }}>
+                      {micData.mood}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {/* Frequency bands */}
+                <Typography variant="caption" display="block" sx={{ mt: 2, mb: 1, opacity: 0.7 }}>
+                  Frequency Bands
+                </Typography>
+
+                <Box sx={{ mb: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.25 }}>
+                    <Typography variant="caption" sx={{ minWidth: 35 }}>Bass</Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.7, minWidth: 30, textAlign: 'right' }}>{micData.bass.toFixed(2)}</Typography>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={Math.min(micData.bass * 100, 100)}
+                    color="error"
+                    sx={{ height: 6, borderRadius: 1, bgcolor: 'action.disabledBackground' }}
+                  />
+                </Box>
+
+                <Box sx={{ mb: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.25 }}>
+                    <Typography variant="caption" sx={{ minWidth: 35 }}>Mid</Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.7, minWidth: 30, textAlign: 'right' }}>{micData.mid.toFixed(2)}</Typography>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={Math.min(micData.mid * 100, 100)}
+                    color="warning"
+                    sx={{ height: 6, borderRadius: 1, bgcolor: 'action.disabledBackground' }}
+                  />
+                </Box>
+
+                <Box sx={{ mb: 0 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.25 }}>
+                    <Typography variant="caption" sx={{ minWidth: 35 }}>High</Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.7, minWidth: 30, textAlign: 'right' }}>{micData.high.toFixed(2)}</Typography>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={Math.min(micData.high * 100, 100)}
+                    color="info"
+                    sx={{ height: 6, borderRadius: 1, bgcolor: 'action.disabledBackground' }}
+                  />
                 </Box>
               </Box>
             )}
+
+            <Divider sx={{ my: 2 }} />
+            <Button
+              onClick={handleResetAll}
+              variant="text"
+              color="error"
+              size="small"
+              fullWidth
+              sx={{ opacity: 0.7 }}
+            >
+              Reset All Data
+            </Button>
           </CardContent>
         </Card>
       </Grid>
     </Grid>
+
+    <Snackbar
+      open={!!saveError}
+      autoHideDuration={6000}
+      onClose={() => setSaveError(null)}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+    >
+      <Alert onClose={() => setSaveError(null)} severity="warning" sx={{ width: '100%' }}>
+        {saveError}
+      </Alert>
+    </Snackbar>
     </ThemeProvider>
   )
 }

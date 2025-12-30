@@ -68,8 +68,14 @@ export type WebGLVisualisationType =
   | 'waterfall'
   | 'image'
 
+interface PostProcessingControls {
+  getInputFramebuffer: () => WebGLFramebuffer | null
+  render: () => void
+  updateTime: (deltaTime: number, beatData?: { isBeat: boolean; beatPhase: number; beatIntensity: number }) => void
+}
+
 interface WebGLVisualiserProps {
-  audioData: number[]
+  audioData: number[] | Float32Array
   isPlaying: boolean
   visualType: WebGLVisualisationType
   config: Record<string, any>
@@ -77,6 +83,7 @@ interface WebGLVisualiserProps {
   beatData?: {
     isBeat: boolean
     beatIntensity: number
+    beatPhase: number
     bpm: number
   }
   frequencyBands?: {
@@ -85,6 +92,9 @@ interface WebGLVisualiserProps {
     high: number
   }
   theme: Theme
+  postProcessing?: PostProcessingControls
+  postProcessingEnabled?: boolean
+  onContextCreated?: (gl: WebGLRenderingContext, canvas: HTMLCanvasElement) => void
 }
 
 interface Particle {
@@ -107,20 +117,40 @@ export const WebGLVisualiser = ({
   customShader,
   beatData,
   frequencyBands,
-  theme
+  theme,
+  postProcessing,
+  postProcessingEnabled = false,
+  onContextCreated
 }: WebGLVisualiserProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const glRef = useRef<WebGLRenderingContext | null>(null)
   const programRef = useRef<WebGLProgram | null>(null)
   const animationRef = useRef<number | undefined>(undefined)
   const startTimeRef = useRef<number>(Date.now())
-  const previousDataRef = useRef<number[]>([])
+  const previousDataRef = useRef<number[] | Float32Array>([])
   const particlesRef = useRef<Particle[]>([])
   const historyRef = useRef<number[]>(new Array(128).fill(0))
   const beatRef = useRef<number>(0)
-  const audioDataRef = useRef<number[]>([])
+  const audioDataRef = useRef<number[] | Float32Array>([])
   const isDrawingRef = useRef<boolean>(false)
   const themeColorsRef = useRef({ primary: [0, 0, 0], secondary: [0, 0, 0] })
+  const lastFrameTimeRef = useRef<number>(performance.now())
+  const postProcessingRef = useRef(postProcessing)
+  const postProcessingEnabledRef = useRef(postProcessingEnabled)
+  const onContextCreatedRef = useRef(onContextCreated)
+  const beatDataRef = useRef(beatData)
+  const frequencyBandsRef = useRef(frequencyBands)
+
+  // Keep refs in sync
+  useEffect(() => {
+    postProcessingRef.current = postProcessing
+    postProcessingEnabledRef.current = postProcessingEnabled
+    onContextCreatedRef.current = onContextCreated
+  }, [postProcessing, postProcessingEnabled, onContextCreated])
+
+  // Update audio-related refs every render (no useEffect needed, they change every frame)
+  beatDataRef.current = beatData
+  frequencyBandsRef.current = frequencyBands
 
   // Update refs in useEffect to avoid recreating callbacks
   useEffect(() => {
@@ -154,6 +184,12 @@ export const WebGLVisualiser = ({
     }
 
     glRef.current = gl
+
+    // Cleanup old program to prevent memory leak
+    if (programRef.current) {
+      gl.deleteProgram(programRef.current)
+      programRef.current = null
+    }
 
     // Create shaders based on visual type
     let vertexSource = vertexShaderSource
@@ -258,18 +294,27 @@ export const WebGLVisualiser = ({
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
+    // Notify parent of context creation (for post-processing setup)
+    if (onContextCreatedRef.current) {
+      onContextCreatedRef.current(gl, canvas)
+    }
+
     return true
   }, [visualType, customShader])
 
   // Apply smoothing
   const getSmoothData = useCallback(
-    (data: number[]): number[] => {
+    (data: number[] | Float32Array): number[] | Float32Array => {
       if (previousDataRef.current.length !== data.length) {
-        previousDataRef.current = [...data]
+        // Create a copy (works for both array types)
+        previousDataRef.current = data.slice(0) as number[] | Float32Array
         return data
       }
 
-      const smoothed = data.map((val, i) => {
+      // We need to handle both types. Float32Array.map returns Float32Array.
+      // Array.map returns Array.
+      // Since TypeScript might get confused, we can cast or just return the result.
+      const smoothed = (data as any).map((val: number, i: number) => {
         const prev = previousDataRef.current[i] || 0
         return prev * smoothing + val * (1 - smoothing)
       })
@@ -281,7 +326,7 @@ export const WebGLVisualiser = ({
 
   // Draw bars with 3D effect
   const drawBars3D = useCallback(
-    (gl: WebGLRenderingContext, data: number[], width: number, height: number) => {
+    (gl: WebGLRenderingContext, data: number[] | Float32Array, width: number, height: number) => {
       const program = programRef.current
       if (!program) return
 
@@ -396,12 +441,13 @@ export const WebGLVisualiser = ({
 
   // Draw particles
   const drawParticles = useCallback(
-    (gl: WebGLRenderingContext, data: number[], width: number, height: number) => {
+    (gl: WebGLRenderingContext, data: number[] | Float32Array, width: number, height: number) => {
       const program = programRef.current
       if (!program) return
 
       // Calculate average amplitude for particle spawning
-      const avgAmplitude = data.reduce((a, b) => a + b, 0) / data.length
+      // reduce might not be available on older browsers for TypedArray? No, standard in ES6.
+      const avgAmplitude = (data as any).reduce((a: number, b: number) => a + b, 0) / data.length
 
       // Spawn new particles based on audio intensity
       const spawnCount = Math.floor(avgAmplitude * sensitivity * 20)
@@ -535,7 +581,7 @@ export const WebGLVisualiser = ({
 
   // Draw radial visualization
   const drawRadial3D = useCallback(
-    (gl: WebGLRenderingContext, data: number[], width: number, height: number) => {
+    (gl: WebGLRenderingContext, data: number[] | Float32Array, width: number, height: number) => {
       const program = programRef.current
       if (!program) return
 
@@ -627,7 +673,7 @@ export const WebGLVisualiser = ({
 
   // Draw waveform with 3D effect
   const drawWaveform3D = useCallback(
-    (gl: WebGLRenderingContext, data: number[], width: number, height: number) => {
+    (gl: WebGLRenderingContext, data: number[] | Float32Array, width: number, height: number) => {
       const program = programRef.current
       if (!program) return
 
@@ -716,7 +762,7 @@ export const WebGLVisualiser = ({
 
   // Draw Bleep
   const drawBleep = useCallback(
-    (gl: WebGLRenderingContext, data: number[], width: number, height: number) => {
+    (gl: WebGLRenderingContext, data: number[] | Float32Array, width: number, height: number) => {
       const program = programRef.current
       if (!program) return
 
@@ -724,7 +770,7 @@ export const WebGLVisualiser = ({
       const speed = config.scroll_time ? 1.0 / config.scroll_time : 1.0
 
       // Update history
-      const avg = data.reduce((a, b) => a + b, 0) / data.length
+      const avg = (data as any).reduce((a: number, b: number) => a + b, 0) / data.length
       historyRef.current.push(avg * sensitivity)
       if (historyRef.current.length > 128) {
         historyRef.current.shift()
@@ -795,15 +841,16 @@ export const WebGLVisualiser = ({
 
   // Draw Concentric
   const drawConcentric = useCallback(
-    (gl: WebGLRenderingContext, data: number[], width: number, height: number) => {
+    (gl: WebGLRenderingContext, data: number[] | Float32Array, width: number, height: number) => {
       const program = programRef.current
       if (!program) return
 
       const scale = config.gradient_scale ?? 1.0
 
-      const avg = data.reduce((a, b) => a + b, 0) / data.length
-      if (beatData) {
-        beatRef.current += beatData.beatIntensity * 0.2
+      const avg = (data as any).reduce((a: number, b: number) => a + b, 0) / data.length
+      const currentBeatData = beatDataRef.current
+      if (currentBeatData) {
+        beatRef.current += currentBeatData.beatIntensity * 0.2
       } else {
         beatRef.current += avg * sensitivity * 0.1
       }
@@ -843,16 +890,16 @@ export const WebGLVisualiser = ({
 
       gl.deleteBuffer(positionBuffer)
     },
-    [sensitivity, config, beatData]
+    [sensitivity, config]
   )
 
   // Draw Custom / GIF / Matrix Effects
   const drawCustom = useCallback(
-    (gl: WebGLRenderingContext, data: number[], width: number, height: number) => {
+    (gl: WebGLRenderingContext, data: number[] | Float32Array, width: number, height: number) => {
       const program = programRef.current
       if (!program) return
 
-      const avg = data.reduce((a, b) => a + b, 0) / data.length
+      const avg = (data as any).reduce((a: number, b: number) => a + b, 0) / data.length
 
       // Common uniforms from config
       const rotation = config.rotate ? config.rotate * (Math.PI / 180) : 0
@@ -871,20 +918,21 @@ export const WebGLVisualiser = ({
       gl.enableVertexAttribArray(positionLoc)
       gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0)
 
-      // Uniforms
+      // Uniforms - all with null checks to suppress warnings
       const resolutionLoc = gl.getUniformLocation(program, 'u_resolution')
-      gl.uniform2f(resolutionLoc, width, height)
+      if (resolutionLoc) gl.uniform2f(resolutionLoc, width, height)
 
       const timeLoc = gl.getUniformLocation(program, 'u_time')
-      gl.uniform1f(timeLoc, ((Date.now() - startTimeRef.current) / 1000) * speed)
+      if (timeLoc) gl.uniform1f(timeLoc, ((Date.now() - startTimeRef.current) / 1000) * speed)
 
       const energyLoc = gl.getUniformLocation(program, 'u_energy')
       if (energyLoc) gl.uniform1f(energyLoc, avg * sensitivity)
 
       const beatLoc = gl.getUniformLocation(program, 'u_beat')
       if (beatLoc) {
-        if (beatData) {
-          beatRef.current += beatData.beatIntensity * 0.2
+        const currentBeatData = beatDataRef.current
+        if (currentBeatData) {
+          beatRef.current += currentBeatData.beatIntensity * 0.2
         } else {
           beatRef.current += avg * sensitivity * 0.1
         }
@@ -905,9 +953,10 @@ export const WebGLVisualiser = ({
       gl.uniform3f(secondaryColorLoc, r2, g2, b2)
 
       // Frequency band uniforms (for new Matrix effects)
-      const bass = frequencyBands?.bass ?? avg
-      const mid = frequencyBands?.mid ?? avg
-      const high = frequencyBands?.high ?? avg
+      const currentFreqBands = frequencyBandsRef.current
+      const bass = currentFreqBands?.bass ?? avg
+      const mid = currentFreqBands?.mid ?? avg
+      const high = currentFreqBands?.high ?? avg
 
       const bassLoc = gl.getUniformLocation(program, 'u_bass')
       if (bassLoc) gl.uniform1f(bassLoc, bass * sensitivity)
@@ -925,7 +974,7 @@ export const WebGLVisualiser = ({
 
       const injectBeatLoc = gl.getUniformLocation(program, 'u_injectBeat')
       if (injectBeatLoc)
-        gl.uniform1f(injectBeatLoc, beatData?.isBeat && config.beat_inject !== false ? 1.0 : 0.0)
+        gl.uniform1f(injectBeatLoc, beatDataRef.current?.isBeat && config.beat_inject !== false ? 1.0 : 0.0)
 
       // Digital Rain
       const densityLoc = gl.getUniformLocation(program, 'u_density')
@@ -1084,7 +1133,7 @@ export const WebGLVisualiser = ({
 
       gl.deleteBuffer(positionBuffer)
     },
-    [sensitivity, config, frequencyBands, beatData, visualType]
+    [sensitivity, config, visualType]
   )
 
   // Main draw function
@@ -1096,13 +1145,67 @@ export const WebGLVisualiser = ({
     const width = canvas.width
     const height = canvas.height
 
-    // Clear with fade effect
+    // Restore program and state at the beginning of the frame
+    // This is necessary because post-processing passes might have changed them
+    if (programRef.current) {
+      gl.useProgram(programRef.current)
+    }
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
+    // Calculate delta time for time-based effects
+    const now = performance.now()
+    const deltaTime = (now - lastFrameTimeRef.current) / 1000 // Convert to seconds
+    lastFrameTimeRef.current = now
+
+    // Check if we should use post-processing
+    const pp = postProcessingRef.current
+    const ppEnabled = postProcessingEnabledRef.current && pp
+
+    // If post-processing is enabled, bind its input framebuffer
+    if (ppEnabled) {
+      const inputFB = pp.getInputFramebuffer()
+      if (inputFB) {
+        // Unbind any texture from TEXTURE0 to prevent feedback loops
+        gl.activeTexture(gl.TEXTURE0)
+        gl.bindTexture(gl.TEXTURE_2D, null)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, inputFB)
+        gl.viewport(0, 0, width, height)
+      }
+    }
+
+    // If post-processing is enabled, bind its input framebuffer
+    if (ppEnabled) {
+      const inputFB = pp.getInputFramebuffer()
+      if (inputFB) {
+        // Unbind any texture from TEXTURE0 to prevent feedback loops
+        gl.activeTexture(gl.TEXTURE0)
+        gl.bindTexture(gl.TEXTURE_2D, null)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, inputFB)
+        gl.viewport(0, 0, width, height)
+      }
+    }
+
+    // Clear the currently bound framebuffer (screen or post-processing input)
+    // Note: gl.clear overwrites the buffer, it does not blend/fade. 
+    // For trails, we would need a fullscreen quad with low opacity, but for now we clear.
     gl.clearColor(0, 0, 0, 0.15)
     gl.clear(gl.COLOR_BUFFER_BIT)
 
     // Use ref for audio data to avoid dependency
     const currentAudioData = audioDataRef.current
     if (currentAudioData.length === 0) {
+      // If using post-processing, still need to render the chain
+      if (ppEnabled) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+        const bd = beatDataRef.current
+        pp.updateTime(deltaTime, bd ? {
+          isBeat: bd.isBeat,
+          beatPhase: bd.beatPhase,
+          beatIntensity: bd.beatIntensity
+        } : undefined)
+        pp.render()
+      }
       animationRef.current = requestAnimationFrame(draw)
       return
     }
@@ -1156,6 +1259,22 @@ export const WebGLVisualiser = ({
           drawCustom(gl, smoothedData, width, height)
           break
       }
+    }
+
+    // If post-processing is enabled, unbind framebuffer and render the chain
+    if (ppEnabled) {
+      // Clean up visualization texture state before post-processing
+      gl.activeTexture(gl.TEXTURE0)
+      gl.bindTexture(gl.TEXTURE_2D, null)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      gl.viewport(0, 0, width, height)
+      const bd = beatDataRef.current
+      pp.updateTime(deltaTime, bd ? {
+        isBeat: bd.isBeat,
+        beatPhase: bd.beatPhase,
+        beatIntensity: bd.beatIntensity
+      } : undefined)
+      pp.render()
     }
 
     animationRef.current = requestAnimationFrame(draw)
