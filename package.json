@@ -1,7 +1,7 @@
 {
   "name": "@mattallmighty/audio-visualiser",
   "private": true,
-  "version": "0.0.5",
+  "version": "0.0.6",
   "type": "module",
   "main": "./dist/audio-visualiser.umd.js",
   "module": "./dist/audio-visualiser.es.js",
@@ -21,7 +21,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build",
-    "dist": "yarn build && node ./scripts/dist.js",
+    "dist": "pnpm build && node ./scripts/dist.js",
     "build:pages": "vite build --mode pages",
     "lint": "eslint .",
     "preview": "vite preview"
