@@ -63,6 +63,9 @@ import {
   Timeline
 } from '@mui/icons-material'
 
+// Audio processing utilities (based on Astrofox audio engine)
+import { FFTParser, WaveParser } from './audioanalyzer/FFTParser'
+
 // --- Font List (from Astrofox fonts.json) ---
 const AVAILABLE_FONTS = [
   'Permanent Marker',
@@ -634,6 +637,9 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
     const canvasSizeRef = useRef({ width: 1920, height: 1080 })
     // Cache for 3D geometry to prevent creating arrays every frame
     const geometryCache = useRef<Map<string, { vertices: [number, number, number][], edges: [number, number][], faces: [number, number, number][] }>>(new Map())
+    // Cache for FFT parsers per-layer (key: layerId, value: parser instance)
+    const fftParserCache = useRef<Map<string, FFTParser>>(new Map())
+    const waveParserCache = useRef<Map<string, WaveParser>>(new Map())
 
     const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null)
     const [layersExpanded, setLayersExpanded] = useState(true)
@@ -954,6 +960,65 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
 
     // --- Rendering Functions ---
 
+    // Get or create FFTParser for a layer with frequency filtering
+    const getFFTParser = useCallback(
+      (layerId: string, minFrequency: number, maxFrequency: number, maxDecibels: number, smoothing: number): FFTParser => {
+        const cacheKey = `${layerId}-${minFrequency}-${maxFrequency}-${maxDecibels}-${smoothing}`
+        let parser = fftParserCache.current.get(cacheKey)
+
+        if (!parser) {
+          parser = new FFTParser({
+            fftSize: 2048,
+            sampleRate: 44100,
+            minFrequency,
+            maxFrequency,
+            maxDecibels,
+            minDecibels: -100,
+            smoothingTimeConstant: smoothing,
+          })
+          fftParserCache.current.set(cacheKey, parser)
+        }
+
+        return parser
+      },
+      []
+    )
+
+    // Get or create WaveParser for a layer
+    const getWaveParser = useCallback(
+      (layerId: string, smoothing: number): WaveParser => {
+        const cacheKey = `${layerId}-${smoothing}`
+        let parser = waveParserCache.current.get(cacheKey)
+
+        if (!parser) {
+          parser = new WaveParser({ smoothingTimeConstant: smoothing })
+          waveParserCache.current.set(cacheKey, parser)
+        }
+
+        return parser
+      },
+      []
+    )
+
+    // Parse raw audio data (0-255 Uint8Array) using FFTParser with per-layer frequency filtering
+    const parseAudioData = useCallback(
+      (
+        data: number[] | Uint8Array,
+        layerId: string,
+        minFrequency: number,
+        maxFrequency: number,
+        maxDecibels: number,
+        smoothing: number,
+        targetBins?: number
+      ): Float32Array => {
+        const parser = getFFTParser(layerId, minFrequency, maxFrequency, maxDecibels, smoothing)
+        // Convert number[] to Uint8Array if needed (assuming data is already 0-255 frequency data)
+        const inputData = data instanceof Uint8Array ? data : new Uint8Array(data.map(v => Math.round(v * 255)))
+        return parser.parseFFT(inputData, targetBins)
+      },
+      [getFFTParser]
+    )
+
     const smoothData = useCallback((data: number[], smoothing: number): number[] => {
       if (smoothedDataRef.current.length !== data.length) {
         smoothedDataRef.current = [...data]
@@ -976,12 +1041,20 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
         centerX: number,
         centerY: number
       ) => {
-        const smoothedData = smoothData(data, layer.smoothing)
-        const numBars = Math.min(
-          smoothedData.length,
-          Math.floor(layer.width / (layer.barWidth + layer.barSpacing))
+        // Calculate number of bars to display
+        const numBars = Math.max(1, Math.floor(layer.width / (layer.barWidth + layer.barSpacing)))
+
+        // Use FFTParser for per-layer frequency filtering and dB normalization
+        // This applies minFrequency, maxFrequency, maxDecibels, and smoothing per-layer
+        const parsedData = parseAudioData(
+          data,
+          layer.id,
+          layer.minFrequency,
+          layer.maxFrequency,
+          layer.maxDecibels,
+          layer.smoothing,
+          numBars // Target number of output bins
         )
-        const dataStep = smoothedData.length / numBars
 
         ctx.save()
         ctx.translate(centerX + layer.x, centerY + layer.y)
@@ -999,8 +1072,7 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
         ctx.fillStyle = gradient
 
         for (let i = 0; i < numBars; i++) {
-          const dataIndex = Math.floor(i * dataStep)
-          const amplitude = smoothedData[dataIndex] || 0
+          const amplitude = parsedData[i] || 0
           const barHeight = amplitude * layer.height
 
           const x = startX + i * (layer.barWidth + layer.barSpacing)
@@ -1016,8 +1088,7 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
           ctx.fillStyle = layer.shadowColor
           ctx.globalAlpha = layer.opacity * 0.3
           for (let i = 0; i < numBars; i++) {
-            const dataIndex = Math.floor(i * dataStep)
-            const amplitude = smoothedData[dataIndex] || 0
+            const amplitude = parsedData[i] || 0
             const barHeight = amplitude * layer.height
             const x = startX + i * (layer.barWidth + layer.barSpacing)
             ctx.fillRect(x, 0, layer.barWidth, Math.min(barHeight * 0.5, layer.shadowHeight))
@@ -1026,7 +1097,7 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
 
         ctx.restore()
       },
-      [smoothData]
+      [parseAudioData]
     )
 
     const renderWaveSpectrum = useCallback(
@@ -1037,7 +1108,17 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
         centerX: number,
         centerY: number
       ) => {
-        const smoothedData = smoothData(data, layer.smoothing)
+        // Use FFTParser for per-layer frequency filtering
+        const numPoints = Math.max(2, Math.floor(layer.width / 4)) // ~4px per point for smooth curve
+        const parsedData = parseAudioData(
+          data,
+          layer.id,
+          layer.minFrequency,
+          layer.maxFrequency,
+          -12, // Default maxDecibels for wave spectrum
+          layer.smoothing,
+          numPoints
+        )
 
         ctx.save()
         ctx.translate(centerX + layer.x, centerY + layer.y)
@@ -1047,19 +1128,19 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
         ctx.globalCompositeOperation = getCompositeOperation(layer.blendMode)
 
         const startX = -layer.width / 2
-        const pointSpacing = layer.width / (smoothedData.length - 1)
+        const pointSpacing = layer.width / (parsedData.length - 1)
 
         ctx.beginPath()
         ctx.moveTo(startX, 0)
 
-        for (let i = 0; i < smoothedData.length; i++) {
+        for (let i = 0; i < parsedData.length; i++) {
           const x = startX + i * pointSpacing
-          const y = -smoothedData[i] * layer.height
+          const y = -parsedData[i] * layer.height
           if (i === 0) {
             ctx.lineTo(x, y)
           } else {
             const prevX = startX + (i - 1) * pointSpacing
-            const prevY = -smoothedData[i - 1] * layer.height
+            const prevY = -(parsedData[i - 1] || 0) * layer.height
             const cpX = (prevX + x) / 2
             ctx.quadraticCurveTo(prevX, prevY, cpX, (prevY + y) / 2)
           }
@@ -1078,7 +1159,7 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
 
         ctx.restore()
       },
-      [smoothData]
+      [parseAudioData]
     )
 
     // NEW: Horizontal SoundWave like Astrofox

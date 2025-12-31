@@ -431,6 +431,11 @@ export const WebGLVisualiser = ({
       // Draw
       gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 2)
 
+      // Disable attributes before cleanup to prevent "no buffer bound" errors
+      gl.disableVertexAttribArray(positionLoc)
+      if (amplitudeLoc !== -1) gl.disableVertexAttribArray(amplitudeLoc)
+      if (indexLoc !== -1) gl.disableVertexAttribArray(indexLoc)
+
       // Cleanup
       gl.deleteBuffer(positionBuffer)
       gl.deleteBuffer(amplitudeBuffer)
@@ -569,6 +574,13 @@ export const WebGLVisualiser = ({
       // Draw points
       gl.drawArrays(gl.POINTS, 0, particlesRef.current.length)
 
+      // Disable attributes before cleanup
+      gl.disableVertexAttribArray(positionLoc)
+      if (velocityLoc !== -1) gl.disableVertexAttribArray(velocityLoc)
+      if (lifeLoc !== -1) gl.disableVertexAttribArray(lifeLoc)
+      if (sizeLoc !== -1) gl.disableVertexAttribArray(sizeLoc)
+      if (amplitudeLoc !== -1) gl.disableVertexAttribArray(amplitudeLoc)
+
       // Cleanup
       gl.deleteBuffer(positionBuffer)
       gl.deleteBuffer(velocityBuffer)
@@ -663,6 +675,11 @@ export const WebGLVisualiser = ({
       // Draw
       gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 2)
 
+      // Disable attributes before cleanup
+      gl.disableVertexAttribArray(positionLoc)
+      if (amplitudeLoc !== -1) gl.disableVertexAttribArray(amplitudeLoc)
+      if (indexLoc !== -1) gl.disableVertexAttribArray(indexLoc)
+
       // Cleanup
       gl.deleteBuffer(positionBuffer)
       gl.deleteBuffer(amplitudeBuffer)
@@ -752,6 +769,11 @@ export const WebGLVisualiser = ({
       // Draw
       gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 2)
 
+      // Disable attributes before cleanup
+      gl.disableVertexAttribArray(positionLoc)
+      if (amplitudeLoc !== -1) gl.disableVertexAttribArray(amplitudeLoc)
+      if (indexLoc !== -1) gl.disableVertexAttribArray(indexLoc)
+
       // Cleanup
       gl.deleteBuffer(positionBuffer)
       gl.deleteBuffer(amplitudeBuffer)
@@ -833,6 +855,9 @@ export const WebGLVisualiser = ({
 
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 
+      // Disable attributes before cleanup
+      gl.disableVertexAttribArray(positionLoc)
+
       gl.deleteBuffer(positionBuffer)
       gl.deleteTexture(texture)
     },
@@ -887,6 +912,9 @@ export const WebGLVisualiser = ({
       gl.uniform3f(secondaryColorLoc, r2, g2, b2)
 
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+
+      // Disable attributes before cleanup
+      gl.disableVertexAttribArray(positionLoc)
 
       gl.deleteBuffer(positionBuffer)
     },
@@ -1130,6 +1158,9 @@ export const WebGLVisualiser = ({
       }
 
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+
+      // Disable attributes before cleanup to prevent "no buffer bound" errors
+      gl.disableVertexAttribArray(positionLoc)
 
       gl.deleteBuffer(positionBuffer)
     },
