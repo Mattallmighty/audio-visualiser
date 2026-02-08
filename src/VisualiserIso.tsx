@@ -79,6 +79,7 @@ interface VisualiserIsoProps {
   effects?: any
   backendAudioData?: number[]
   ConfigFormComponent?: React.ComponentType<any>
+  configData?: any
   onClose?: () => void
 }
 
@@ -109,6 +110,7 @@ const VisualiserIso = ({
   effects,
   backendAudioData,
   ConfigFormComponent,
+  configData,
   onClose
 }: VisualiserIsoProps) => {
   const fullscreenHandle = useFullScreenHandle()
@@ -144,7 +146,7 @@ const VisualiserIso = ({
   const [isPlaying, setIsPlaying] = useState(true) // Default to playing for auto-start
   const [fullScreen, setFullScreen] = useState(false)
   const [visualType, setVisualType] = useState<VisualisationType>(savedState?.visualType || 'gif')
-  
+
   // Store custom configs for ALL visualiser types in one object
   const [allConfigs, setAllConfigs] = useState<Record<string, any>>(() => {
     const initial = { ...DEFAULT_CONFIGS }
@@ -515,6 +517,57 @@ const VisualiserIso = ({
     return () => clearInterval(interval)
   }, [autoChange, isPlaying, audioSource, triggerRandomVisual])
 
+  // YZ: Handle query parameter for initial visualizer type
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const visualParam = params.get('visual')
+    const fullScreenParam = params.get('fullscreen')
+
+    if (visualParam) {
+      // Mapping from display names to technical keys (case-insensitive)
+      const displayNameMap: Record<string, VisualisationType> = {
+        'kaleidoscope': 'gif',
+        'matrix rain': 'matrix',
+        'synthwave terrain': 'terrain',
+        'geometric pulse': 'geometric',
+        'concentric rings': 'concentric',
+        'spectrum bars': 'bars3d',
+        'radial spectrum': 'radial3d',
+        'oscilloscope': 'bleep',
+        'bands matrix': 'bandsmatrix',
+        'equalizer 2d': 'equalizer2d',
+        'digital rain': 'digitalrain',
+        'game of life': 'gameoflife',
+        'keybeat 2d': 'keybeat2d',
+        'plasma 2d': 'plasma2d',
+        'plasma wled': 'plasmawled2d',
+        'butterchurn (milkdrop)': 'butterchurn',
+        'milkdrop': 'butterchurn',
+        'astrofox (layers)': 'astrofox',
+        'fluid simulation': 'fluid',
+        'wave mountain': 'wavemountain',
+        'hex grid': 'hexgrid',
+        'spiral galaxy': 'spiralgalaxy',
+        'aurora borealis': 'auroraborealis',
+        'frequency rings': 'frequencyrings',
+        'neon terrain': 'neonterrain'
+      }
+
+      const normalizedParam = visualParam.toLowerCase().trim()
+      
+      // Try display name first, then technical name
+      const visualType = displayNameMap[normalizedParam] || 
+                        (VISUALIZER_TYPES.includes(normalizedParam as VisualisationType) 
+                          ? normalizedParam as VisualisationType 
+                          : null)
+      
+      if (visualType) {
+        setVisualType(visualType)
+      }
+    }
+
+  }, [configData])
+
   // Create or use provided theme
   const activeTheme = theme || createTheme({ palette: { mode: 'dark' } })
 
@@ -522,20 +575,29 @@ const VisualiserIso = ({
     <ThemeProvider theme={activeTheme}>
       <Grid
         container
-        spacing={2}
+        spacing={configData?.background ? 0 : 2}
         sx={{
           justifyContent: 'center',
-          paddingTop: '1rem',
+          paddingTop: configData?.background ? 0 : '1rem',
           width: '100%',
-          maxWidth: '1600px',
-          margin: '0 auto'
+          maxWidth: configData?.background ? '100%' : '1600px',
+          height: configData?.background ? '100vh' : 'auto',
+          margin: configData?.background ? 0 : '0 auto'
         }}
       >
         {/* Top Row: Visualiser (Full Width) */}
         <Grid size={{ xs: 12 }} key="visualiser-canvas">
-        <Card variant="outlined" sx={{ '& > .MuiCardContent-root': { pb: '0.25rem' } }}>
-          <CardContent>
+        <Card variant="outlined" sx={{ 
+          '& > .MuiCardContent-root': { pb: '0.25rem' },
+          ...(configData?.background && { 
+            border: 'none', 
+            background: 'transparent',
+            boxShadow: 'none'
+          })
+        }}>
+          <CardContent sx={configData?.background ? { padding: 0, '&:last-child': { paddingBottom: 0 } } : {}}>
             {/* Header / Controls */}
+            {!configData?.background && (
             <Box
               sx={{
                 display: 'flex',
@@ -739,17 +801,21 @@ const VisualiserIso = ({
                 </Tooltip>
               </Box>
             </Box>
+            )}
 
             {/* Canvas Area */}
             <Box
               sx={{
-                position: 'relative',
-                width: '100%',
-                height: '60vh',
-                minHeight: '400px',
+                position: configData?.background ? 'fixed' : 'relative',
+                top: configData?.background ? 0 : 'auto',
+                left: configData?.background ? 0 : 'auto',
+                width: configData?.background ? '100vw' : '100%',
+                height: configData?.background ? '100vh' : '60vh',
+                minHeight: configData?.background ? '100vh' : '400px',
                 bgcolor: 'black',
-                borderRadius: 1,
+                borderRadius: configData?.background ? 0 : 1,
                 overflow: 'hidden',
+                zIndex: configData?.background ? 9999 : 'auto',
                 '& .fullscreen-wrapper': { width: '100%', height: '100%' }
               }}
             >
@@ -760,12 +826,14 @@ const VisualiserIso = ({
               >
                 <Box
                   sx={{
-                    width: fullScreen ? '100vw' : '100%',
-                    height: fullScreen ? '100vh' : '100%',
+                    width: fullScreen || configData?.background ? '100vw' : '100%',
+                    height: fullScreen || configData?.background ? '100vh' : '100%',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    bgcolor: 'black'
+                    alignItems: configData?.background ? 'stretch' : 'center',
+                    justifyContent: configData?.background ? 'stretch' : 'center',
+                    bgcolor: 'black',
+                    zIndex: configData?.background ? 1 : 'auto',
+                    '& > *': configData?.background ? { width: '100%', height: '100%' } : {}
                   }}
                   onDoubleClick={fullScreen ? fullscreenHandle.exit : fullscreenHandle.enter}
                 >
@@ -886,7 +954,7 @@ const VisualiserIso = ({
                   )}
 
                   {/* Debug Overlay */}
-                  {config.developer_mode && audioSource === 'mic' && (
+                  {!configData?.background && config.developer_mode && audioSource === 'mic' && (
                     <Paper
                       sx={{
                         position: 'absolute',
@@ -986,7 +1054,7 @@ const VisualiserIso = ({
                     </Paper>
                   )}
 
-                  {fullScreen && (
+                  {!configData?.background && fullScreen && (
                     <Box sx={{ position: 'absolute', bottom: 20, left: 20 }}>
                       <IconButton
                         onClick={fullscreenHandle.exit}
@@ -1008,6 +1076,8 @@ const VisualiserIso = ({
       </Grid>
 
       {/* Bottom Row */}
+      {!configData?.background && (
+      <>
       <Grid size={{ xs: 12, md: 8 }} key="config-panel">
         {/* Effect Configuration OR Shader Editor */}
         <ConfigurationPanel
@@ -1052,6 +1122,8 @@ const VisualiserIso = ({
           tapTempo={tapTempo}
         />
       </Grid>
+      </>
+      )}
     </Grid>
 
     <Snackbar
