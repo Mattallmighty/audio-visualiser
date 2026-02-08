@@ -40,7 +40,9 @@ const libraryConfig: UserConfig = {
           react: 'React',
           'react-dom': 'ReactDOM'
         },
-        exports: 'named'
+        exports: 'named',
+        // Ensure the IIFE is assigned to window
+        extend: true
       }
     }
   }

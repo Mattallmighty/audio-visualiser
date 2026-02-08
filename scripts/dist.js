@@ -5,7 +5,7 @@ import path from 'path';
 
 const releaseDir = './release';
 const jsSource = './dist/yz-audio-visualiser.js';
-const typesSource = './dist/index.d.ts';
+const typesSource = './dist/audio-visualiser.d.ts';
 
 const jsDest = path.join(releaseDir, 'yz-audio-visualiser.js');
 const typesDest = path.join(releaseDir, 'yz-audio-visualiser.d.ts');

@@ -11,9 +11,7 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Stack,
   Tooltip,
-  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Paper,
@@ -25,17 +23,13 @@ import {
   Theme,
   ThemeProvider,
   createTheme,
-  LinearProgress,
   Snackbar,
-  Alert,
-  Divider
-} from '@mui/material'
+  Alert} from '@mui/material'
 import {
   Fullscreen,
   FullscreenExit,
   PlayArrow,
   Pause,
-  Code,
   Mic,
   Cloud,
   AutoAwesome,
@@ -49,6 +43,19 @@ import WebGLVisualiser, { WebGLVisualisationType } from './WebGLVisualiser'
 
 // Extended type that includes special visualizers not handled by WebGL
 type VisualisationType = WebGLVisualisationType | 'butterchurn' | 'astrofox' | 'fluid' | 'wavemountain' | 'hexgrid' | 'spiralgalaxy' | 'auroraborealis' | 'frequencyrings' | 'neonterrain'
+
+// Exposed API for imperative control
+export interface VisualiserIsoRef {
+  loadPreset: (index: number) => void
+  loadPresetByName: (name: string) => void
+  nextVisual: () => void
+  prevVisual: () => void
+  setVisual: (type: VisualisationType) => void
+  togglePlay: () => void
+  toggleFullscreen: () => void
+  getCurrentVisual: () => VisualisationType
+  getCurrentPreset: () => { name: string; index: number }
+}
 import ButterchurnVisualiser, { ButterchurnConfig } from './ButterchurnVisualiser'
 import FluidVisualiser, { FluidConfig, DEFAULT_FLUID_CONFIG } from './FluidVisualiser'
 import WaveMountainVisualiser, { WaveMountainConfig, DEFAULT_WAVEMOUNTAIN_CONFIG } from './WaveMountainVisualiser'
@@ -57,20 +64,12 @@ import SpiralGalaxyVisualiser, { SpiralGalaxyConfig, DEFAULT_SPIRALGALAXY_CONFIG
 import AuroraBorealisVisualiser, { AuroraBorealisConfig, DEFAULT_AURORABOREALIS_CONFIG } from './AuroraBorealisVisualiser'
 import FrequencyRingsVisualiser, { FrequencyRingsConfig, DEFAULT_FREQUENCYRINGS_CONFIG } from './FrequencyRingsVisualiser'
 import NeonTerrainVisualiser, { NeonTerrainConfig, DEFAULT_NEONTERRAIN_CONFIG } from './NeonTerrainVisualiser'
-import AstrofoxVisualiser, { AstrofoxConfig, DEFAULT_ASTROFOX_CONFIG, ASTROFOX_PRESETS, getAstrofoxPresetLayers, AstrofoxVisualiserRef } from './AstrofoxVisualiser'
+import AstrofoxVisualiser, { AstrofoxConfig, DEFAULT_ASTROFOX_CONFIG, AstrofoxVisualiserRef } from './AstrofoxVisualiser'
 import { gifFragmentShader } from './shaders'
 import useAudioAnalyser from './audioanalyzer/useAudioAnalyser'
 import {
-  DEFAULT_CONFIGS,
-  orderEffectProperties,
-  VISUAL_TO_BACKEND_EFFECT,
-  VISUALISER_SCHEMAS
-} from './visualizerConstants'
-import SimpleConfigForm from './SimpleConfigForm'
+  DEFAULT_CONFIGS} from './visualizerConstants'
 import { usePostProcessing, PostProcessingConfig } from './usePostProcessing'
-import { PostProcessingPanel } from './PostProcessingPanel'
-import SpectrumAnalyzer from './SpectrumAnalyzer'
-import AudioStatsPanel from './AudioStatsPanel'
 import PresetsPanel from './PresetsPanel'
 import ConfigurationPanel from './ConfigurationPanel'
 
@@ -105,14 +104,17 @@ const VISUALIZER_TYPES: VisualisationType[] = [
   'frequencyrings', 'neonterrain'
 ]
 
-const VisualiserIso = ({
-  theme,
-  effects,
-  backendAudioData,
-  ConfigFormComponent,
-  configData,
-  onClose
-}: VisualiserIsoProps) => {
+// Direct function component - API exposed via window.visualiserApi
+const VisualiserIso = (
+  {
+    theme,
+    effects,
+    backendAudioData,
+    ConfigFormComponent,
+    configData,
+    onClose
+  }: VisualiserIsoProps
+) => {
   const fullscreenHandle = useFullScreenHandle()
 
   // Check if backend is available
@@ -344,6 +346,68 @@ const VisualiserIso = ({
     handleTypeChange(VISUALIZER_TYPES[nextIndex])
   }, [visualType, handleTypeChange])
 
+  // Ref to access Butterchurn methods
+  const butterchurnRef = useRef<any>(null)
+
+  // REMOVED useImperativeHandle - using window.visualiserApi instead
+
+  // Expose API via window for dynamic module access (no rerenders!)
+  useEffect(() => {
+    // @ts-expect-error - Attach API to window
+    window.visualiserApi = {
+      loadPreset: (index: number) => {
+        if (visualType === 'butterchurn') {
+          setButterchurnConfig(prev => ({
+            ...prev,
+            currentPresetIndex: index
+          }))
+          butterchurnRef.current?.setPreset(index)
+        }
+      },
+      loadPresetByName: (name: string) => {
+        if (visualType === 'butterchurn') {
+          setButterchurnConfig(prev => ({
+            ...prev,
+            initialPresetName: name
+          }))
+        }
+      },
+      nextVisual: handleNextVisualizer,
+      prevVisual: handlePrevVisualizer,
+      setVisual: handleTypeChange,
+      togglePlay: () => {
+        setIsPlaying(prev => {
+          const newState = !prev
+          if (!hasBackend && audioSource === 'mic') {
+            if (newState) {
+              startListening()
+            } else {
+              stopListening()
+            }
+          }
+          return newState
+        })
+      },
+      toggleFullscreen: () => {
+        if (fullScreen) {
+          fullscreenHandle.exit()
+        } else {
+          fullscreenHandle.enter()
+        }
+      },
+      getCurrentVisual: () => visualType,
+      getCurrentPreset: () => ({
+        name: butterchurnRef.current?.getCurrentPresetName?.() || '',
+        index: butterchurnConfig.currentPresetIndex
+      })
+    }
+
+    return () => {
+      // @ts-expect-error - Cleanup on unmount
+      delete window.visualiserApi
+    }
+  }, [visualType, butterchurnConfig, fullScreen, audioSource, hasBackend, handleNextVisualizer, handlePrevVisualizer, handleTypeChange, startListening, stopListening, fullscreenHandle])
+
   const handleApplyShader = () => {
     setActiveCustomShader(shaderCode)
   }
@@ -522,6 +586,8 @@ const VisualiserIso = ({
     const params = new URLSearchParams(window.location.search)
     const visualParam = params.get('visual')
     const fullScreenParam = params.get('fullscreen')
+    const presetParam = params.get('preset')
+    const presetIndexParam = params.get('presetIndex')
 
     if (visualParam) {
       // Mapping from display names to technical keys (case-insensitive)
@@ -563,6 +629,24 @@ const VisualiserIso = ({
       
       if (visualType) {
         setVisualType(visualType)
+        
+        // If preset parameters are provided and we're loading butterchurn, set them
+        if (visualType === 'butterchurn') {
+          if (presetParam) {
+            setButterchurnConfig(prev => ({
+              ...prev,
+              initialPresetName: presetParam
+            }))
+          } else if (presetIndexParam) {
+            const presetIndex = parseInt(presetIndexParam, 10)
+            if (!isNaN(presetIndex) && presetIndex >= 0) {
+              setButterchurnConfig(prev => ({
+                ...prev,
+                initialPresetIndex: presetIndex
+              }))
+            }
+          }
+        }
       }
     }
 
@@ -839,6 +923,7 @@ const VisualiserIso = ({
                 >
                   {visualType === 'butterchurn' ? (
                     <ButterchurnVisualiser
+                      ref={butterchurnRef}
                       audioData={activeAudioData}
                       isPlaying={isPlaying}
                       config={butterchurnConfig}
@@ -1139,5 +1224,7 @@ const VisualiserIso = ({
     </ThemeProvider>
   )
 }
+
+VisualiserIso.displayName = 'VisualiserIso'
 
 export default VisualiserIso

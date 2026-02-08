@@ -53,7 +53,9 @@ const loadButterchurn = async (): Promise<boolean> => {
         try {
           const result = content()
           if (result && typeof result === 'object') return result
-        } catch (e) {}
+        } catch (e) {
+          console.warn('Failed to execute preset function:', e)
+        }
       }
       
       // Case 4: content is the presets object itself
@@ -102,6 +104,8 @@ export interface ButterchurnConfig {
   blendTime: number // seconds to blend between presets
   shufflePresets: boolean
   currentPresetIndex: number
+  initialPresetName?: string // preset name to load on mount (from URL param)
+  initialPresetIndex?: number // preset index to load on mount (from URL param)
 }
 
 export interface ButterchurnVisualiserRef {
@@ -236,11 +240,38 @@ const ButterchurnVisualiser = forwardRef<ButterchurnVisualiserRef, ButterchurnVi
 
           // Load initial preset
           if (names.length > 0 && visualizerRef.current) {
-            const initialIndex = config.currentPresetIndex || 0
-            const preset = butterchurnPresets[names[initialIndex]]
-            visualizerRef.current.loadPreset(preset, 0)
-            setCurrentPresetName(names[initialIndex])
-            setCurrentPresetIndex(initialIndex)
+            // Check if URL specified a preset name (highest priority)
+            if (config.initialPresetName) {
+              const presetIndex = names.findIndex(p => p.toLowerCase() === config.initialPresetName!.toLowerCase())
+              if (presetIndex !== -1) {
+                const preset = butterchurnPresets[names[presetIndex]]
+                if (preset) {
+                  visualizerRef.current.loadPreset(preset, 0)
+                  setCurrentPresetName(names[presetIndex])
+                  setCurrentPresetIndex(presetIndex)
+                }
+              }
+            } else if (config.initialPresetIndex !== undefined && config.initialPresetIndex >= 0 && config.initialPresetIndex < names.length) {
+              // Check if URL specified a preset index
+              const presetIndex = config.initialPresetIndex
+              const actualIndex = config.shufflePresets ? shuffledIndices[presetIndex] : presetIndex
+              const presetName = names[actualIndex]
+              const preset = butterchurnPresets[presetName]
+              if (preset) {
+                visualizerRef.current.loadPreset(preset, 0)
+                setCurrentPresetName(presetName)
+                setCurrentPresetIndex(presetIndex)
+              }
+            } else {
+              // Load from saved index
+              const initialIndex = config.currentPresetIndex || 0
+              const preset = butterchurnPresets[names[initialIndex]]
+              if (preset) {
+                visualizerRef.current.loadPreset(preset, 0)
+                setCurrentPresetName(names[initialIndex])
+                setCurrentPresetIndex(initialIndex)
+              }
+            }
           }
         }
 
@@ -325,6 +356,19 @@ const ButterchurnVisualiser = forwardRef<ButterchurnVisualiserRef, ButterchurnVi
         }
       },
       [presetNames, shuffledIndices, config.shufflePresets, config.blendTime, onConfigChange]
+    )
+
+    // Load preset by name (for URL parameter support)
+    const loadPresetByName = useCallback(
+      (name: string) => {
+        if (!butterchurnPresets || presetNames.length === 0) return
+
+        const index = presetNames.findIndex(p => p.toLowerCase() === name.toLowerCase())
+        if (index !== -1) {
+          loadPreset(index)
+        }
+      },
+      [presetNames, loadPreset]
     )
 
     // Next/Previous preset
