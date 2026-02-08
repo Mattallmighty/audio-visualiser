@@ -113,7 +113,9 @@ export interface ButterchurnVisualiserRef {
   nextPreset: () => void
   prevPreset: () => void
   setPreset: (index: number) => void
+  loadPresetByName: (name: string) => void
   getCurrentPresetName: () => string
+  getPresetNames: () => string[]
 }
 
 type AudioDataArray = number[] | Float32Array
@@ -501,9 +503,11 @@ const ButterchurnVisualiser = forwardRef<ButterchurnVisualiserRef, ButterchurnVi
         nextPreset,
         prevPreset,
         setPreset: loadPreset,
-        getCurrentPresetName: () => currentPresetName
+        loadPresetByName,
+        getCurrentPresetName: () => currentPresetName,
+        getPresetNames: () => presetNames
       }),
-      [nextPreset, prevPreset, loadPreset, currentPresetName]
+      [nextPreset, prevPreset, loadPreset, loadPresetByName, currentPresetName, presetNames]
     )
 
     return (
@@ -527,24 +531,26 @@ const ButterchurnVisualiser = forwardRef<ButterchurnVisualiserRef, ButterchurnVi
         />
 
         {/* Preset name overlay */}
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 16,
-            left: 16,
-            color: 'white',
-            textShadow: '0 0 4px black, 0 0 8px black',
-            pointerEvents: 'none',
-            opacity: 0.8
-          }}
-        >
-          <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-            {currentPresetName}
-          </Typography>
-          <Typography variant="caption" display="block" sx={{ opacity: 0.6, fontSize: '0.65rem' }}>
-            {currentPresetIndex + 1} / {presetNames.length}
-          </Typography>
-        </Box>
+        {showControls && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 16,
+              left: 16,
+              color: 'white',
+              textShadow: '0 0 4px black, 0 0 8px black',
+              pointerEvents: 'none',
+              opacity: 0.8
+            }}
+          >
+            <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
+              {currentPresetName}
+            </Typography>
+            <Typography variant="caption" display="block" sx={{ opacity: 0.6, fontSize: '0.65rem' }}>
+              {currentPresetIndex + 1} / {presetNames.length}
+            </Typography>
+          </Box>
+        )}
 
         {/* Controls overlay */}
         {showControls && (

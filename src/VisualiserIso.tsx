@@ -42,7 +42,7 @@ import { FullScreen, useFullScreenHandle } from 'react-full-screen'
 import WebGLVisualiser, { WebGLVisualisationType } from './WebGLVisualiser'
 
 // Extended type that includes special visualizers not handled by WebGL
-type VisualisationType = WebGLVisualisationType | 'butterchurn' | 'astrofox' | 'fluid' | 'wavemountain' | 'hexgrid' | 'spiralgalaxy' | 'auroraborealis' | 'frequencyrings' | 'neonterrain'
+type VisualisationType = WebGLVisualisationType | 'butterchurn' | 'astrofox' | 'fluid' | 'wavemountain' | 'bladewave' | 'hexgrid' | 'spiralgalaxy' | 'auroraborealis' | 'frequencyrings' | 'neonterrain'
 
 // Exposed API for imperative control
 export interface VisualiserIsoRef {
@@ -53,12 +53,16 @@ export interface VisualiserIsoRef {
   setVisual: (type: VisualisationType) => void
   togglePlay: () => void
   toggleFullscreen: () => void
+  toggleOverlays: () => void
+  getOverlaysVisible: () => boolean
   getCurrentVisual: () => VisualisationType
   getCurrentPreset: () => { name: string; index: number }
+  getPresetNames: () => string[]
 }
 import ButterchurnVisualiser, { ButterchurnConfig } from './ButterchurnVisualiser'
 import FluidVisualiser, { FluidConfig, DEFAULT_FLUID_CONFIG } from './FluidVisualiser'
 import WaveMountainVisualiser, { WaveMountainConfig, DEFAULT_WAVEMOUNTAIN_CONFIG } from './WaveMountainVisualiser'
+import BladeWaveVisualizer, { BladeWaveConfig, DEFAULT_BLADEWAVE_CONFIG } from './BladeWaveVisualizer'
 import HexGridVisualiser, { HexGridConfig, DEFAULT_HEXGRID_CONFIG } from './HexGridVisualiser'
 import SpiralGalaxyVisualiser, { SpiralGalaxyConfig, DEFAULT_SPIRALGALAXY_CONFIG } from './SpiralGalaxyVisualiser'
 import AuroraBorealisVisualiser, { AuroraBorealisConfig, DEFAULT_AURORABOREALIS_CONFIG } from './AuroraBorealisVisualiser'
@@ -100,7 +104,7 @@ const VISUALIZER_TYPES: VisualisationType[] = [
   // Layer-Based
   'astrofox',
   // Simulation
-  'fluid', 'wavemountain', 'hexgrid', 'spiralgalaxy', 'auroraborealis',
+  'fluid', 'wavemountain', 'bladewave', 'hexgrid', 'spiralgalaxy', 'auroraborealis',
   'frequencyrings', 'neonterrain'
 ]
 
@@ -199,6 +203,9 @@ const VisualiserIso = (
   // Wave Mountain state
   const [waveMountainConfig, setWaveMountainConfig] = useState<WaveMountainConfig>(savedState?.waveMountainConfig || DEFAULT_WAVEMOUNTAIN_CONFIG)
 
+  // Blade Wave state
+  const [bladeWaveConfig, setBladeWaveConfig] = useState<BladeWaveConfig>(savedState?.bladeWaveConfig || DEFAULT_BLADEWAVE_CONFIG)
+
   // Hex Grid state
   const [hexGridConfig, setHexGridConfig] = useState<HexGridConfig>(savedState?.hexGridConfig || DEFAULT_HEXGRID_CONFIG)
 
@@ -213,6 +220,9 @@ const VisualiserIso = (
 
   // Neon Terrain state
   const [neonTerrainConfig, setNeonTerrainConfig] = useState<NeonTerrainConfig>(savedState?.neonTerrainConfig || DEFAULT_NEONTERRAIN_CONFIG)
+
+  // UI state
+  const [showOverlays, setShowOverlays] = useState(savedState?.showOverlays ?? true)
 
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -231,7 +241,8 @@ const VisualiserIso = (
       spiralGalaxyConfig,
       auroraBorealisConfig,
       frequencyRingsConfig,
-      neonTerrainConfig
+      neonTerrainConfig,
+      showOverlays
     }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave))
@@ -242,7 +253,7 @@ const VisualiserIso = (
         setSaveError('Storage full! Some images may be too large to save.')
       }
     }
-  }, [visualType, allConfigs, fxEnabled, ppConfig, butterchurnConfig, astrofoxConfig, fluidConfig, waveMountainConfig, hexGridConfig, spiralGalaxyConfig, auroraBorealisConfig, frequencyRingsConfig, neonTerrainConfig])
+  }, [visualType, allConfigs, fxEnabled, ppConfig, butterchurnConfig, astrofoxConfig, fluidConfig, waveMountainConfig, hexGridConfig, spiralGalaxyConfig, auroraBorealisConfig, frequencyRingsConfig, neonTerrainConfig, showOverlays])
 
   // Post-processing hook
   const [ppState, ppControls] = usePostProcessing(
@@ -366,10 +377,7 @@ const VisualiserIso = (
       },
       loadPresetByName: (name: string) => {
         if (visualType === 'butterchurn') {
-          setButterchurnConfig(prev => ({
-            ...prev,
-            initialPresetName: name
-          }))
+          butterchurnRef.current?.loadPresetByName(name)
         }
       },
       nextVisual: handleNextVisualizer,
@@ -399,14 +407,25 @@ const VisualiserIso = (
       getCurrentPreset: () => ({
         name: butterchurnRef.current?.getCurrentPresetName?.() || '',
         index: butterchurnConfig.currentPresetIndex
-      })
+      }),
+      getPresetNames: () => butterchurnRef.current?.getPresetNames?.() || [],
+      toggleOverlays: () => setShowOverlays((prev: boolean) => !prev),
+      getOverlaysVisible: () => showOverlays,
+      getWaveMountainConfig: () => waveMountainConfig,
+      setWaveMountainConfig: (config: Partial<WaveMountainConfig>) => {
+        setWaveMountainConfig((prev) => ({ ...prev, ...config }))
+      },
+      getBladeWaveConfig: () => bladeWaveConfig,
+      setBladeWaveConfig: (config: Partial<BladeWaveConfig>) => {
+        setBladeWaveConfig((prev) => ({ ...prev, ...config }))
+      }
     }
 
     return () => {
       // @ts-expect-error - Cleanup on unmount
       delete window.visualiserApi
     }
-  }, [visualType, butterchurnConfig, fullScreen, audioSource, hasBackend, handleNextVisualizer, handlePrevVisualizer, handleTypeChange, startListening, stopListening, fullscreenHandle])
+  }, [visualType, butterchurnConfig, fullScreen, audioSource, hasBackend, handleNextVisualizer, handlePrevVisualizer, handleTypeChange, startListening, stopListening, fullscreenHandle, showOverlays, waveMountainConfig, bladeWaveConfig])
 
   const handleApplyShader = () => {
     setActiveCustomShader(shaderCode)
@@ -930,7 +949,7 @@ const VisualiserIso = (
                       onConfigChange={(update) =>
                         setButterchurnConfig((prev) => ({ ...prev, ...update }))
                       }
-                      showControls={true}
+                      showControls={showOverlays}
                       audioStream={audioSource === 'mic' ? getStream() : undefined}
                     />
                   ) : visualType === 'astrofox' ? (
@@ -963,6 +982,17 @@ const VisualiserIso = (
                       config={waveMountainConfig}
                       onConfigChange={(update) =>
                         setWaveMountainConfig((prev) => ({ ...prev, ...update }))
+                      }
+                      frequencyBands={frequencyBands}
+                      beatData={beatData}
+                    />
+                  ) : visualType === 'bladewave' ? (
+                    <BladeWaveVisualizer
+                      audioData={activeAudioData}
+                      isPlaying={isPlaying}
+                      config={bladeWaveConfig}
+                      onConfigChange={(update) =>
+                        setBladeWaveConfig((prev) => ({ ...prev, ...update }))
                       }
                       frequencyBands={frequencyBands}
                       beatData={beatData}
