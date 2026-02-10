@@ -81,6 +81,15 @@ export const AudioProvider = ({ backendAudioData, children }: AudioProviderProps
     }
   }, [hasBackend, audioSource, setAudioSource])
 
+  // Auto-play when backend audio is available (integrated mode)
+  useEffect(() => {
+    if (hasBackend && audioSource === 'backend' && backendAudioData && backendAudioData.length > 0) {
+      if (!isPlaying) {
+        setIsPlaying(true)
+      }
+    }
+  }, [hasBackend, audioSource, backendAudioData, isPlaying, setIsPlaying])
+
   // Auto-start microphone if isPlaying is true on mount
   useEffect(() => {
     if (isPlaying && (audioSource === 'mic' || audioSource === 'system') && !isListening) {

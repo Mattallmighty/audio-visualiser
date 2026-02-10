@@ -88,8 +88,12 @@ function generateUISchema(schema: VisualizerSchema): string {
   
   // Generate properties object
   const properties = visibleProps.map(([key, prop]) => {
+    // Special case: Butterchurn preset name should be autocomplete from the start
+    const isButterchurnPreset = schema.$id === 'butterchurn' && key === 'currentPresetName'
+    
     const propObj: any = {
-      type: prop.type === 'integer' ? 'integer' : 
+      type: isButterchurnPreset ? 'autocomplete' :
+            prop.type === 'integer' ? 'integer' : 
             (prop as any).format === 'color' ? 'color' : 
             prop.type,
       title: prop.title,
@@ -100,6 +104,12 @@ function generateUISchema(schema: VisualizerSchema): string {
     if ('minimum' in prop && prop.minimum !== undefined) propObj.minimum = prop.minimum
     if ('maximum' in prop && prop.maximum !== undefined) propObj.maximum = prop.maximum
     if ('isGradient' in prop && prop.isGradient) propObj.isGradient = true
+    
+    // Add enum and freeSolo for butterchurn preset
+    if (isButterchurnPreset) {
+      propObj.enum = []
+      propObj.freeSolo = true
+    }
     
     return `    ${key}: ${JSON.stringify(propObj, null, 6).replace(/\n/g, '\n    ')}`
   }).join(',\n')

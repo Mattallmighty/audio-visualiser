@@ -11,6 +11,7 @@ export interface VisualiserWindowApi {
   loadPreset: (index: number) => void
   loadPresetByName: (name: string) => void
   getCurrentPreset: () => { name: string; index: number }
+  getPresetNames: () => string[]
   
   // Fullscreen control (needs fullscreenHandle)
   toggleFullscreen: () => void

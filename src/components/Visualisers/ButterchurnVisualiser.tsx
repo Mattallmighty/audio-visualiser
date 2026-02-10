@@ -6,7 +6,7 @@
  */
 
 import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react'
-import { Box, IconButton, Typography, Slider, Tooltip } from '@mui/material'
+import { Box, IconButton, Typography, Slider } from '@mui/material'
 import { SkipPrevious, SkipNext, Shuffle, Settings } from '@mui/icons-material'
 import * as staticPresets from 'butterchurn-presets'
 import { useStore } from '../../store'
@@ -601,6 +601,7 @@ const ButterchurnVisualiser = forwardRef<ButterchurnVisualiserRef, ButterchurnVi
         {/* Preset name overlay */}
         {showControls && (
           <Box
+            key="preset-name-overlay"
             sx={{
               position: 'absolute',
               top: 16,
@@ -623,6 +624,7 @@ const ButterchurnVisualiser = forwardRef<ButterchurnVisualiserRef, ButterchurnVi
         {/* Controls overlay */}
         {showControls && (
           <Box
+            key="controls-overlay"
             sx={{
               position: 'absolute',
               bottom: 16,
@@ -637,45 +639,51 @@ const ButterchurnVisualiser = forwardRef<ButterchurnVisualiserRef, ButterchurnVi
               py: 0.5
             }}
           >
-            <Tooltip title="Previous preset">
-              <IconButton onClick={prevPreset} size="small" sx={{ color: 'white' }}>
-                <SkipPrevious />
-              </IconButton>
-            </Tooltip>
+            {/* FIX: Use native title instead of MUI Tooltip to avoid key warning in integrated mode */}
+            <IconButton 
+              onClick={prevPreset} 
+              size="small" 
+              sx={{ color: 'white' }}
+              title="Previous preset"
+            >
+              <SkipPrevious />
+            </IconButton>
 
-            <Tooltip title="Random preset">
-              <IconButton
-                onClick={randomPreset}
-                size="small"
-                sx={{ color: config.shufflePresets ? 'primary.main' : 'white' }}
-              >
-                <Shuffle />
-              </IconButton>
-            </Tooltip>
+            <IconButton
+              onClick={randomPreset}
+              size="small"
+              sx={{ color: config.shufflePresets ? 'primary.main' : 'white' }}
+              title="Random preset"
+            >
+              <Shuffle />
+            </IconButton>
 
-            <Tooltip title="Next preset">
-              <IconButton onClick={nextPreset} size="small" sx={{ color: 'white' }}>
-                <SkipNext />
-              </IconButton>
-            </Tooltip>
+            <IconButton 
+              onClick={nextPreset} 
+              size="small" 
+              sx={{ color: 'white' }}
+              title="Next preset"
+            >
+              <SkipNext />
+            </IconButton>
 
             <Box sx={{ width: 1, height: 20, bgcolor: 'rgba(255,255,255,0.2)', mx: 1 }} />
 
-            <Tooltip title="Settings">
-              <IconButton
-                onClick={() => setShowSettings(!showSettings)}
-                size="small"
-                sx={{ color: showSettings ? 'primary.main' : 'white' }}
-              >
-                <Settings />
-              </IconButton>
-            </Tooltip>
+            <IconButton
+              onClick={() => setShowSettings(!showSettings)}
+              size="small"
+              sx={{ color: showSettings ? 'primary.main' : 'white' }}
+              title="Settings"
+            >
+              <Settings />
+            </IconButton>
           </Box>
         )}
 
         {/* Settings panel */}
         {showSettings && (
           <Box
+            key="settings-panel"
             sx={{
               position: 'absolute',
               bottom: 70,
@@ -697,11 +705,6 @@ const ButterchurnVisualiser = forwardRef<ButterchurnVisualiserRef, ButterchurnVi
               min={0}
               max={120}
               step={5}
-              marks={[
-                { value: 0, label: 'Off' },
-                { value: 25, label: '25s' },
-                { value: 60, label: '60s' }
-              ]}
               sx={{ mb: 2 }}
             />
 
@@ -721,6 +724,7 @@ const ButterchurnVisualiser = forwardRef<ButterchurnVisualiserRef, ButterchurnVi
         {/* Loading state */}
         {!isLoaded && (
           <Box
+            key="loading-state"
             sx={{
               position: 'absolute',
               top: '50%',

@@ -19,6 +19,7 @@ import SimpleConfigForm from '../SimpleConfigForm'
 import { DEFAULT_CONFIGS } from '../../_generated/webgl/defaults'
 import { VISUAL_TO_BACKEND_EFFECT } from '../../_generated/webgl/backend-mapping'
 import { VISUALISER_SCHEMAS } from '../../_generated/webgl/schemas'
+import { VISUALIZER_REGISTRY } from '../../_generated/registry'
 import { orderEffectProperties } from '../../utils/webgl'
 import { useStore } from '../../store'
 
@@ -394,25 +395,15 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
           (() => {
             // Use custom form component if provided (integrated mode)
             if (ConfigFormComponent && effects) {
-              const backendEffectType = VISUAL_TO_BACKEND_EFFECT[visualType]
-              const schemaProperties =
-                backendEffectType && effects[backendEffectType]
-                  ? orderEffectProperties(
-                      effects[backendEffectType].schema,
-                      effects[backendEffectType].hidden_keys,
-                      effects[backendEffectType].advanced_keys,
-                      config.advanced
-                    )
-                  : VISUALISER_SCHEMAS[visualType] || []
-
+              // Get schema from visualizer registry (schema-first architecture)
+              const uiSchema = VISUALIZER_REGISTRY[visualType]?.getUISchema?.(config)
+              
               return (
                 <ConfigFormComponent
-                  handleEffectConfig={handleEffectConfig}
-                  virtId="visualiser"
-                  schemaProperties={schemaProperties}
+                  schema={uiSchema}
                   model={config}
-                  selectedType={visualType}
-                  descriptions="Show"
+                  onModelChange={(update: any) => handleEffectConfig(update)}
+                  hideToggle={true}
                 />
               )
             }

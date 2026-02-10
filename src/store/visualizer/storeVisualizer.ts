@@ -18,7 +18,7 @@ export interface StoreVisualizerActions {
 const storeVisualizer = (set: any) => ({
   // State
   visualType: 'butterchurn' as VisualisationType,
-  audioSource: 'mic' as 'backend' | 'mic' | 'system',
+  audioSource: 'backend' as 'backend' | 'mic' | 'system',
   autoChange: false,
   isPlaying: true,
 

@@ -24,7 +24,7 @@
     "generate:schemas": "tsx scripts/generate-schemas.ts",
     "generate:backend": "tsx scripts/extract-backend-schemas.ts",
     "generate:webgl": "tsx scripts/generate-webgl-registry.ts",
-    "generate": "pnpm generate:schemas && pnpm generate:webgl && pnpm generate:backend",
+    "generate": "pnpm generate:schemas && pnpm generate:webgl",
     "prebuild": "pnpm generate",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build",
     "dist": "pnpm build && node ./scripts/dist.js",
@@ -62,7 +62,8 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.38.0",
     "vite": "^7.3.0",
-    "vite-plugin-dts": "^4.5.4"
+    "vite-plugin-dts": "^4.5.4",
+    "webpack-cli": "^6.0.1"
   },
   "peerDependencies": {
     "react": "^19.1.0",

@@ -19,6 +19,7 @@ import { useStore } from './store'
 import VisualizerControls from './components/Visualisers/Base/VisualizerControls'
 import ConfigurationPanel from './components/Panels/ConfigurationPanel'
 import PresetsPanel from './components/Panels/PresetsPanel'
+import { ThemeProvider } from '@mui/material/styles'
 
 const VisualiserIsoInner = (
   {
@@ -168,9 +169,11 @@ VisualiserIsoInner.displayName = 'VisualiserIsoInner'
 
 export const VisualiserIso = (props: VisualiserIsoProps) => {
   return (
-    <AudioProvider backendAudioData={props.backendAudioData}>
-      <VisualiserIsoInner {...props} />
-    </AudioProvider>
+    <ThemeProvider theme={props.theme}>
+      <AudioProvider backendAudioData={props.backendAudioData}>
+        <VisualiserIsoInner {...props} />
+      </AudioProvider>
+    </ThemeProvider>
   )
 }
 

@@ -134,9 +134,9 @@ const VisualizerControls: React.FC<VisualizerControlsProps> = ({
               label="Visualization"
               onChange={(e) => handleTypeChange(e.target.value as WebGLVisualisationType)}
             >
-              {CATEGORY_ORDER.map(category => {
+              {CATEGORY_ORDER.flatMap(category => {
                 const visualizers = getVisualizersByCategory()[category]
-                if (!visualizers || visualizers.length === 0) return null
+                if (!visualizers || visualizers.length === 0) return []
                 return [
                   <MenuItem 
                     key={`header-${category}`} 

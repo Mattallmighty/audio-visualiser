@@ -38,6 +38,9 @@ export const WindowApiHandler = ({ butterchurnRef, fullscreenHandle }: WindowApi
         name: butterchurnRef.current?.getCurrentPresetName?.() || '',
         index: butterchurnConfig.currentPresetIndex
       }),
+      getPresetNames: () => {
+        return butterchurnRef.current?.getPresetNames?.() || []
+      },
       
       // Fullscreen (needs fullscreenHandle)
       toggleFullscreen: () => {

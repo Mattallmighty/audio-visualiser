@@ -102,6 +102,7 @@ export const VisualiserCanvas = ({
             if (visualType === 'butterchurn') {
               return (
                 <ButterchurnVisualiser
+                  key="butterchurn-visualiser"
                   ref={butterchurnRef}
                   audioData={activeAudioData}
                   isPlaying={isPlaying}
@@ -117,6 +118,7 @@ export const VisualiserCanvas = ({
             if (visualType === 'astrofox') {
               return (
                 <AstrofoxVisualiser
+                  key="astrofox-visualiser"
                   ref={astrofoxRef}
                   audioData={activeAudioData}
                   isPlaying={isPlaying}
@@ -133,6 +135,7 @@ export const VisualiserCanvas = ({
             if (VisualizerComponent) {
               return (
                 <VisualizerComponent
+                  key={`${visualType}-visualiser`}
                   audioData={activeAudioData}
                   isPlaying={isPlaying}
                   config={visualizerConfigs[visualType as string]}
@@ -149,6 +152,7 @@ export const VisualiserCanvas = ({
             // Fallback: WebGL visualizers (38 effects)
             return (
               <WebGLVisualiser
+                key={`${visualType}-webgl-visualiser`}
                 theme={theme}
                 audioData={activeAudioData}
                 isPlaying={isPlaying}
@@ -166,12 +170,12 @@ export const VisualiserCanvas = ({
 
           {/* Debug Overlay */}
           {!configData?.background && showOverlays && config.developer_mode && audioSource === 'mic' && (
-            <AudioDebugOverlay micData={micData} />
+            <AudioDebugOverlay key="audio-debug-overlay" micData={micData} />
           )}
 
           {/* Fullscreen Exit Button */}
           {!configData?.background && showOverlays && fullScreen && (
-            <Box sx={{ position: 'absolute', bottom: 20, left: 20 }}>
+            <Box key="fullscreen-exit-button" sx={{ position: 'absolute', bottom: 20, left: 20 }}>
               <IconButton
                 onClick={fullscreenHandle.exit}
                 sx={{
