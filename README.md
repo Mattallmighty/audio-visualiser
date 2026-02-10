@@ -144,17 +144,29 @@ function MyApp() {
 - **2D Effects:** `bands`, `bandsmatrix`, `blocks`, `equalizer2d`
 - **Matrix Effects:** `blender`, `clone`, `digitalrain`, `flame`, `gameoflife`, `image`, `keybeat2d`, `noise2d`, `plasma2d`, `plasmawled2d`, `radial`, `soap`, `texter`, `waterfall`
 
+## � Documentation
+
+Comprehensive documentation is available in the `/docs` folder:
+
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Project structure, integration context, and principles
+- **[COMMUNICATION.md](docs/COMMUNICATION.md)** - 5-generation frontend communication evolution
+- **[FRONTEND_INTEGRATION.md](docs/FRONTEND_INTEGRATION.md)** - Integration guide for LedFx-Frontend
+- **[GENERATORS.md](docs/GENERATORS.md)** - All 3 auto-generation systems (55 visualizers)
+- **[ZUSTAND_STORE.md](docs/ZUSTAND_STORE.md)** - Store architecture and usage patterns
+- **[WEBGL_GENERATION.md](docs/WEBGL_GENERATION.md)** - WebGL registry generation details
+- **[BACKEND-SCHEMA-GENERATION.md](docs/BACKEND-SCHEMA-GENERATION.md)** - Backend effect schema generation
+
 ## 🛠️ Building
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Build for production
-npm run build
+pnpm build
 
 # Run in development mode
-npm run dev
+pnpm dev
 ```
 
 ## 🤝 Contributing

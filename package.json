@@ -20,6 +20,12 @@
   },
   "scripts": {
     "dev": "vite",
+    "predev": "pnpm generate",
+    "generate:schemas": "tsx scripts/generate-schemas.ts",
+    "generate:backend": "tsx scripts/extract-backend-schemas.ts",
+    "generate:webgl": "tsx scripts/generate-webgl-registry.ts",
+    "generate": "pnpm generate:schemas && pnpm generate:webgl && pnpm generate:backend",
+    "prebuild": "pnpm generate",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build",
     "dist": "pnpm build && node ./scripts/dist.js",
     "build:pages": "vite build --mode pages",
@@ -35,7 +41,8 @@
     "butterchurn-presets": "^2.4.7",
     "meyda": "^5.6.2",
     "react-full-screen": "^1.1.1",
-    "realtime-bpm-analyzer": "^5.0.0"
+    "realtime-bpm-analyzer": "^5.0.0",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
@@ -51,6 +58,7 @@
     "globals": "^16.3.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "tsx": "^4.21.0",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.38.0",
     "vite": "^7.3.0",

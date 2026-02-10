@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "WebGL Visualizers Metadata - Single source of truth for frontend-only GLSL shaders",
+  "visualizers": {
+    "gif": {
+      "displayName": "Kaleidoscope",
+      "category": "Original Effects",
+      "description": "Rotating kaleidoscope patterns with audio reactivity",
+      "aliases": ["kaleidoscope"],
+      "tags": ["geometric", "rotation", "symmetry"]
+    },
+    "matrix": {
+      "displayName": "Matrix Rain",
+      "category": "Original Effects",
+      "description": "Falling digital rain inspired by The Matrix",
+      "tags": ["retro", "classic", "digital"]
+    },
+    "terrain": {
+      "displayName": "Synthwave Terrain",
+      "category": "Original Effects",
+      "description": "80s-inspired wireframe terrain flyover",
+      "aliases": ["synthwave", "retrowave"],
+      "tags": ["retro", "3d", "wireframe"]
+    },
+    "geometric": {
+      "displayName": "Geometric Pulse",
+      "category": "Original Effects",
+      "description": "Pulsating geometric shapes with audio sync",
+      "tags": ["geometric", "shapes", "pulse"]
+    },
+    "concentric": {
+      "displayName": "Concentric Rings",
+      "category": "Original Effects",
+      "description": "Expanding concentric circles from center",
+      "tags": ["circles", "rings", "expansion"]
+    },
+    "particles": {
+      "displayName": "Particles",
+      "category": "Original Effects",
+      "description": "3D particle system reacting to audio",
+      "tags": ["3d", "particles", "physics"]
+    },
+    "bars3d": {
+      "displayName": "Spectrum Bars",
+      "category": "Original Effects",
+      "description": "Classic 3D frequency spectrum bars",
+      "aliases": ["spectrum", "bars"],
+      "tags": ["3d", "spectrum", "classic"]
+    },
+    "radial3d": {
+      "displayName": "Radial Spectrum",
+      "category": "Original Effects",
+      "description": "Circular spectrum analyzer with 3D depth",
+      "tags": ["3d", "spectrum", "radial"]
+    },
+    "waveform3d": {
+      "displayName": "Waveform",
+      "category": "Original Effects",
+      "description": "3D oscilloscope-style waveform display",
+      "aliases": ["oscilloscope"],
+      "tags": ["3d", "waveform", "oscilloscope"]
+    },
+    "bleep": {
+      "displayName": "Oscilloscope",
+      "category": "Original Effects",
+      "description": "XY oscilloscope visualization",
+      "aliases": ["xy scope", "vector scope"],
+      "tags": ["oscilloscope", "retro", "vector"]
+    },
+    "bands": {
+      "displayName": "Bands",
+      "category": "2D Effects",
+      "description": "Horizontal frequency bands with smooth gradients",
+      "tags": ["2d", "bands", "spectrum"]
+    },
+    "bandsmatrix": {
+      "displayName": "Bands Matrix",
+      "category": "2D Effects",
+      "description": "Matrix-style bands with scrolling effect",
+      "tags": ["2d", "bands", "matrix"]
+    },
+    "blocks": {
+      "displayName": "Blocks",
+      "category": "2D Effects",
+      "description": "Block-based frequency visualization",
+      "tags": ["2d", "blocks", "pixel"]
+    },
+    "equalizer2d": {
+      "displayName": "Equalizer 2D",
+      "category": "2D Effects",
+      "description": "Classic equalizer bars in 2D space",
+      "tags": ["2d", "equalizer", "bars"]
+    },
+    "blender": {
+      "displayName": "Blender",
+      "category": "Matrix Effects",
+      "description": "Blended color transitions across LED matrix",
+      "tags": ["2d", "matrix", "blend"]
+    },
+    "clone": {
+      "displayName": "Clone",
+      "category": "Matrix Effects",
+      "description": "Pattern cloning and repetition effect",
+      "tags": ["2d", "matrix", "clone"]
+    },
+    "digitalrain": {
+      "displayName": "Digital Rain",
+      "category": "Matrix Effects",
+      "description": "Matrix-style digital rain for LED panels",
+      "tags": ["2d", "matrix", "rain"]
+    },
+    "flame": {
+      "displayName": "Flame",
+      "category": "Matrix Effects",
+      "description": "Rising flame simulation",
+      "tags": ["2d", "matrix", "fire", "physics"]
+    },
+    "gameoflife": {
+      "displayName": "Game of Life",
+      "category": "Matrix Effects",
+      "description": "Conway's Game of Life cellular automaton",
+      "aliases": ["conway", "cellular automaton"],
+      "tags": ["2d", "matrix", "cellular", "simulation"]
+    },
+    "image": {
+      "displayName": "Image",
+      "category": "Matrix Effects",
+      "description": "Display custom images on LED matrix",
+      "tags": ["2d", "matrix", "image", "custom"]
+    },
+    "keybeat2d": {
+      "displayName": "Keybeat 2D",
+      "category": "Matrix Effects",
+      "description": "Beat-reactive key pattern visualization",
+      "tags": ["2d", "matrix", "beat"]
+    },
+    "noise2d": {
+      "displayName": "Noise",
+      "category": "Matrix Effects",
+      "description": "Perlin noise-based organic patterns",
+      "aliases": ["perlin"],
+      "tags": ["2d", "matrix", "noise", "organic"]
+    },
+    "plasma2d": {
+      "displayName": "Plasma 2D",
+      "category": "Matrix Effects",
+      "description": "Classic demoscene plasma effect",
+      "tags": ["2d", "matrix", "plasma", "retro"]
+    },
+    "plasmawled2d": {
+      "displayName": "Plasma WLED",
+      "category": "Matrix Effects",
+      "description": "WLED-compatible plasma effect variant",
+      "tags": ["2d", "matrix", "plasma", "wled"]
+    },
+    "radial": {
+      "displayName": "Radial",
+      "category": "Matrix Effects",
+      "description": "Radial gradient patterns from center",
+      "tags": ["2d", "matrix", "radial", "gradient"]
+    },
+    "soap": {
+      "displayName": "Soap",
+      "category": "Matrix Effects",
+      "description": "Soap bubble-like interference patterns",
+      "tags": ["2d", "matrix", "interference", "organic"]
+    },
+    "texter": {
+      "displayName": "Texter",
+      "category": "Matrix Effects",
+      "description": "Scrolling text display for LED matrix",
+      "tags": ["2d", "matrix", "text", "scroll"]
+    },
+    "waterfall": {
+      "displayName": "Waterfall",
+      "category": "Matrix Effects",
+      "description": "Frequency waterfall spectrogram",
+      "aliases": ["spectrogram"],
+      "tags": ["2d", "matrix", "waterfall", "spectrum"]
+    }
+  }
+}

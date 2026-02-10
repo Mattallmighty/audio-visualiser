@@ -13,6 +13,9 @@ dist-ssr
 release
 *.local
 
+# Generated files
+src/_generated/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
