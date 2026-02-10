@@ -39,7 +39,11 @@ const VisualiserIsoInner = (
     startListening,
     stopListening,
     handleSourceChange,
-    tapTempo
+    tapTempo,
+    audioDevices,
+    selectedDeviceId,
+    changeDevice,
+    startSystemAudio
   } = useAudio()
 
   const visualType = useStore(state => state.visualType)
@@ -116,6 +120,10 @@ const VisualiserIsoInner = (
               startListening={startListening}
               stopListening={stopListening}
               fullscreenHandle={fullscreenHandle}
+              audioDevices={audioDevices}
+              selectedDeviceId={selectedDeviceId}
+              changeDevice={changeDevice}
+              startSystemAudio={startSystemAudio}
             />
           )}
           <VisualiserCanvas

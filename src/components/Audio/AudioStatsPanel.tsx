@@ -3,7 +3,7 @@ import { Box, Typography, Button, LinearProgress, useTheme } from '@mui/material
 import SpectrumAnalyzer from '../SpectrumAnalyzer'
 
 interface AudioStatsPanelProps {
-  audioSource: 'backend' | 'mic'
+  audioSource: 'backend' | 'mic' | 'system'
   micData: any
   tapTempo: () => void
 }
@@ -11,7 +11,7 @@ interface AudioStatsPanelProps {
 const AudioStatsPanel: React.FC<AudioStatsPanelProps> = ({ audioSource, micData, tapTempo }) => {
   const theme = useTheme()
 
-  if (audioSource !== 'mic') return null
+  if (audioSource !== 'mic' && audioSource !== 'system') return null
 
   return (
     <Box sx={{ mt: 3 }}>

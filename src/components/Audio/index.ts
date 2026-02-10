@@ -10,6 +10,7 @@ export { AudioProvider, useAudio } from './AudioProvider'
 // UI Components
 export { default as AudioStatus } from './AudioStatus'
 export { default as AudioSelector } from './AudioSelector'
+export { default as AudioInputSelector } from './AudioInputSelector'
 export { default as AudioDebugOverlay } from './AudioDebugOverlay'
 
 // Panels

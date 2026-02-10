@@ -33,7 +33,7 @@ import { type FullScreenHandle } from 'react-full-screen'
 import { type WebGLVisualisationType } from '..'
 import { type VisualisationType, getVisualizersByCategory, CATEGORY_ORDER } from '../../../engines/webgl/registry'
 import { useStore } from '../../../store'
-import { AudioStatus, AudioSelector } from '../../Audio'
+import { AudioStatus, AudioSelector, AudioInputSelector } from '../../Audio'
 
 interface VisualizerControlsProps {
   onClose?: () => void
@@ -45,10 +45,14 @@ interface VisualizerControlsProps {
   handlePrevVisualizer: () => void
   handleNextVisualizer: () => void
   handleTypeChange: (type: VisualisationType) => void
-  handleSourceChange: (event: React.MouseEvent<HTMLElement>, newSource: 'backend' | 'mic' | null) => void
+  handleSourceChange: (event: React.MouseEvent<HTMLElement>, newSource: 'backend' | 'mic' | 'system' | null) => void
   startListening: () => void
   stopListening: () => void
   fullscreenHandle: FullScreenHandle
+  audioDevices: MediaDeviceInfo[]
+  selectedDeviceId: string
+  changeDevice: (deviceId: string) => Promise<void>
+  startSystemAudio?: () => Promise<void>
 }
 
 const VisualizerControls: React.FC<VisualizerControlsProps> = ({
@@ -64,7 +68,11 @@ const VisualizerControls: React.FC<VisualizerControlsProps> = ({
   handleSourceChange,
   startListening,
   stopListening,
-  fullscreenHandle
+  fullscreenHandle,
+  audioDevices,
+  selectedDeviceId,
+  changeDevice,
+  startSystemAudio
 }) => {
   const visualType = useStore(state => state.visualType)
   const audioSource = useStore(state => state.audioSource)
@@ -164,6 +172,14 @@ const VisualizerControls: React.FC<VisualizerControlsProps> = ({
           handleSourceChange={handleSourceChange}
         />
 
+        {audioSource === 'mic' && (
+          <AudioInputSelector
+            audioDevices={audioDevices}
+            selectedDeviceId={selectedDeviceId}
+            onDeviceChange={changeDevice}
+          />
+        )}
+
         <Tooltip title="Auto-change visuals on beat">
           <ToggleButton
             value="auto"
@@ -201,10 +217,14 @@ const VisualizerControls: React.FC<VisualizerControlsProps> = ({
               const newPlayingState = !isPlaying
               setIsPlaying(newPlayingState)
               
-              // In standalone mic mode, control mic listening based on playing state
-              if (!hasBackend && audioSource === 'mic') {
+              // In standalone mic or system mode, control listening based on playing state
+              if (!hasBackend && (audioSource === 'mic' || audioSource === 'system')) {
                 if (newPlayingState) {
-                  startListening()
+                  if (audioSource === 'system' && startSystemAudio) {
+                    startSystemAudio()
+                  } else {
+                    startListening()
+                  }
                 } else {
                   stopListening()
                 }

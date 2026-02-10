@@ -27,10 +27,17 @@ interface AudioContextValue {
   // Backend state
   hasBackend: boolean
   
+  // Audio device management
+  audioDevices: MediaDeviceInfo[]
+  selectedDeviceId: string
+  changeDevice: (deviceId: string) => Promise<void>
+  enumerateDevices: () => Promise<MediaDeviceInfo[]>
+  
   // Actions
   startListening: () => Promise<void>
   stopListening: () => void
-  handleSourceChange: (event: React.MouseEvent<HTMLElement>, newSource: 'backend' | 'mic' | null) => void
+  startSystemAudio: () => Promise<void>
+  handleSourceChange: (event: React.MouseEvent<HTMLElement>, newSource: 'backend' | 'mic' | 'system' | null) => void
   getStream: () => MediaStream | null
   tapTempo: () => void
 }
@@ -56,7 +63,12 @@ export const AudioProvider = ({ backendAudioData, children }: AudioProviderProps
     isListening,
     error: micError,
     tapTempo,
-    getStream
+    getStream,
+    audioDevices,
+    selectedDeviceId,
+    changeDevice,
+    enumerateDevices,
+    startSystemAudio,
   } = useAudioAnalyser()
 
   // Check if backend is available
@@ -64,15 +76,16 @@ export const AudioProvider = ({ backendAudioData, children }: AudioProviderProps
 
   // Detect audio source based on backend availability
   useEffect(() => {
-    if (hasBackend && audioSource === 'mic') {
+    if (hasBackend && (audioSource === 'mic' || audioSource === 'system')) {
       setAudioSource('backend')
     }
   }, [hasBackend, audioSource, setAudioSource])
 
   // Auto-start microphone if isPlaying is true on mount
   useEffect(() => {
-    if (isPlaying && audioSource === 'mic' && !isListening) {
-      startListening().catch(err => {
+    if (isPlaying && (audioSource === 'mic' || audioSource === 'system') && !isListening) {
+      const startAudio = audioSource === 'system' ? startSystemAudio : startListening
+      startAudio().catch((err: any) => {
         console.warn('Auto-start failed (likely due to browser policy):', err)
         setIsPlaying(false) // Revert to paused if auto-start fails
       })
@@ -82,26 +95,28 @@ export const AudioProvider = ({ backendAudioData, children }: AudioProviderProps
 
   // Handle Source Switching
   const handleSourceChange = useCallback(
-    (event: React.MouseEvent<HTMLElement>, newSource: 'backend' | 'mic' | null) => {
+    (event: React.MouseEvent<HTMLElement>, newSource: 'backend' | 'mic' | 'system' | null) => {
       if (newSource !== null) {
         setAudioSource(newSource)
         if (newSource === 'mic') {
           startListening()
+        } else if (newSource === 'system') {
+          startSystemAudio()
         } else {
           stopListening()
         }
       }
     },
-    [setAudioSource, startListening, stopListening]
+    [setAudioSource, startListening, startSystemAudio, stopListening]
   )
 
   // Compute active audio data based on source
-  const activeAudioData = audioSource === 'mic' 
+  const activeAudioData = (audioSource === 'mic' || audioSource === 'system')
     ? micData.normalizedFrequency 
     : (backendAudioData || [])
 
-  // Compute beat data (only available for mic)
-  const beatData = audioSource === 'mic'
+  // Compute beat data (only available for mic/system)
+  const beatData = (audioSource === 'mic' || audioSource === 'system')
     ? { 
         isBeat: micData.isBeat, 
         beatIntensity: micData.beatIntensity, 
@@ -111,7 +126,7 @@ export const AudioProvider = ({ backendAudioData, children }: AudioProviderProps
     : undefined
 
   // Compute frequency bands
-  const frequencyBands = audioSource === 'mic'
+  const frequencyBands = (audioSource === 'mic' || audioSource === 'system')
     ? { bass: micData.bass, mid: micData.mid, high: micData.high }
     : calculateFrequencyBands(backendAudioData || [])
 
@@ -123,8 +138,13 @@ export const AudioProvider = ({ backendAudioData, children }: AudioProviderProps
     micError,
     isListening,
     hasBackend,
+    audioDevices,
+    selectedDeviceId,
+    changeDevice,
+    enumerateDevices,
     startListening,
     stopListening,
+    startSystemAudio,
     handleSourceChange,
     getStream,
     tapTempo

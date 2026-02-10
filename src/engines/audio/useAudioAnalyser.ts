@@ -275,6 +275,8 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [data, setData] = useState<AudioAnalyserData>({
     frequencyData: new Uint8Array(0),
     normalizedFrequency: new Float32Array(0),
@@ -553,18 +555,63 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
     };
   }, [cfg.fftSize, cfg.beatDecay]);
 
-  const startListening = useCallback(async () => {
+  const startListening = useCallback(async (deviceId?: string, useSystemAudio = false) => {
     try {
       setError(null);
 
-      // Request microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
+      let stream: MediaStream;
+
+      if (useSystemAudio) {
+        // Use getDisplayMedia for system audio (loopback)
+        try {
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+              displaySurface: 'browser',
+            } as any,
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+              suppressLocalAudioPlayback: false,
+            } as any,
+            preferCurrentTab: false,
+            selfBrowserSurface: 'exclude',
+            systemAudio: 'include',
+          } as any);
+
+          // Stop video tracks immediately if any (we only want audio)
+          stream.getVideoTracks().forEach(track => track.stop());
+
+          // Check if we actually got audio
+          if (stream.getAudioTracks().length === 0) {
+            throw new Error('No audio track in the screen share. Please select "Share audio" when prompted.');
+          }
+        } catch (err: any) {
+          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            throw new Error('Screen share permission denied. Please allow screen sharing to capture system audio.');
+          }
+          throw err;
+        }
+      } else {
+        // Use provided deviceId or fall back to selectedDeviceId state
+        const targetDeviceId = deviceId || selectedDeviceId;
+
+        // Request microphone access
+        const audioConstraints: MediaTrackConstraints = {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
-        },
-      });
+        };
+
+        // Use specific device if available
+        if (targetDeviceId) {
+          audioConstraints.deviceId = { exact: targetDeviceId };
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+        });
+      }
 
       streamRef.current = stream;
 
@@ -598,7 +645,7 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
       console.error("Failed to start audio analyser:", err);
       setError(err.message || "Failed to access microphone");
     }
-  }, [cfg]);
+  }, [cfg, selectedDeviceId]);
 
   const stopListening = useCallback(() => {
     // Stop animation
@@ -640,10 +687,68 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
     waveArrayRef.current = null;
   }, []);
 
+  // Enumerate audio input devices
+  const enumerateDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(device => device.kind === 'audioinput');
+      setAudioDevices(audioInputs);
+      
+      // Set default device if none selected
+      if (!selectedDeviceId && audioInputs.length > 0) {
+        setSelectedDeviceId(audioInputs[0].deviceId);
+      }
+      
+      return audioInputs;
+    } catch (err) {
+      console.error('Failed to enumerate devices:', err);
+      return [];
+    }
+  }, [selectedDeviceId]);
+
+  // Change audio input device
+  const changeDevice = useCallback(async (deviceId: string) => {
+    setSelectedDeviceId(deviceId);
+    
+    // If currently listening, restart with new device
+    if (isListening) {
+      stopListening();
+      await startListening(deviceId);
+    }
+  }, [isListening, stopListening, startListening]);
+
   // Tap tempo function
   const tapTempo = useCallback(() => {
     bpmDetectorRef.current?.tap();
   }, []);
+
+  // Start system audio (loopback) capture
+  const startSystemAudio = useCallback(async () => {
+    await startListening(undefined, true);
+  }, [startListening]);
+
+  // Enumerate devices on mount
+  useEffect(() => {
+    enumerateDevices();
+    
+    // Listen for device changes
+    const handleDeviceChange = () => {
+      enumerateDevices();
+    };
+    
+    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    
+    return () => {
+      navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+    };
+  }, [enumerateDevices]);
+
+  // Re-enumerate devices after starting to listen to get proper labels
+  useEffect(() => {
+    if (isListening) {
+      enumerateDevices();
+    }
+  }, [isListening, enumerateDevices]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -664,6 +769,11 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
     stopListening,
     tapTempo,
     getStream,
+    audioDevices,
+    selectedDeviceId,
+    changeDevice,
+    enumerateDevices,
+    startSystemAudio,
   };
 }
 

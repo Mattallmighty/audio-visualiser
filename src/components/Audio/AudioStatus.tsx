@@ -1,7 +1,7 @@
 import { Typography } from '@mui/material'
 
 interface AudioStatusProps {
-  audioSource: 'backend' | 'mic'
+  audioSource: 'backend' | 'mic' | 'system'
   micError: string | null
   isListening: boolean
   micData: {
@@ -26,6 +26,12 @@ const AudioStatus: React.FC<AudioStatusProps> = ({
           : isListening
             ? `Listening (BPM: ${micData.bpm})`
             : 'Microphone Inactive'
+        : audioSource === 'system'
+        ? micError
+          ? `Error: ${micError}`
+          : isListening
+            ? `System Audio (BPM: ${micData.bpm})`
+            : 'System Audio Inactive'
         : (backendAudioData && backendAudioData.length > 0)
           ? 'Receiving Backend Audio'
           : 'Waiting for Backend Audio'}

@@ -1,10 +1,10 @@
 import { ToggleButtonGroup, ToggleButton } from '@mui/material'
-import { Cloud, Mic } from '@mui/icons-material'
+import { Cloud, Mic, CastConnected } from '@mui/icons-material'
 
 interface AudioSelectorProps {
   hasBackend: boolean
-  audioSource: 'backend' | 'mic'
-  handleSourceChange: (event: React.MouseEvent<HTMLElement>, newSource: 'backend' | 'mic' | null) => void
+  audioSource: 'backend' | 'mic' | 'system'
+  handleSourceChange: (event: React.MouseEvent<HTMLElement>, newSource: 'backend' | 'mic' | 'system' | null) => void
 }
 
 const AudioSelector: React.FC<AudioSelectorProps> = ({
@@ -13,7 +13,7 @@ const AudioSelector: React.FC<AudioSelectorProps> = ({
   handleSourceChange
 }) => {
   // Only show if backend is available
-  if (!hasBackend) return null
+  // if (!hasBackend) return null
 
   return (
     <ToggleButtonGroup
@@ -22,11 +22,14 @@ const AudioSelector: React.FC<AudioSelectorProps> = ({
       onChange={handleSourceChange}
       size="small"
     >
-      <ToggleButton value="backend">
+      {hasBackend && <ToggleButton value="backend">
         <Cloud sx={{ mr: 1 }} /> Backend
-      </ToggleButton>
+      </ToggleButton>}
       <ToggleButton value="mic">
         <Mic sx={{ mr: 1 }} /> Mic
+      </ToggleButton>
+      <ToggleButton value="system">
+        <CastConnected sx={{ mr: 1 }} /> System
       </ToggleButton>
     </ToggleButtonGroup>
   )
