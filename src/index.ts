@@ -13,6 +13,9 @@ export type { VisualiserWindowApi } from './types/VisualiserWindowApi'
 export { DEFAULT_CONFIGS } from './_generated/webgl/defaults'
 export { VISUAL_TO_BACKEND_EFFECT } from './_generated/webgl/backend-mapping'
 export { VISUALISER_SCHEMAS } from './_generated/webgl/schemas'
+export { ALL_VISUALIZERS_WITH_CATEGORIES } from './engines/webgl/registry'
+export { ALL_VISUALIZERS } from './_generated'
+export { ALL_WEBGL_VISUALIZERS } from './_generated/webgl'
 
 // Export Zustand store (advanced API)
 export { useStore } from './store'

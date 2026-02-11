@@ -237,6 +237,113 @@ import type { VisualisationType } from '@/types/visualiser'
 type StoreState = ReturnType<typeof useVstore.getState>
 ```
 
+---
+
+## 🔗 URL Query Parameters
+
+> **New Feature:** Automatic configuration via URL parameters
+
+The visualizer supports URL query parameters for automatic configuration, enabling OBS integration, preset sharing, and deep linking.
+
+### ✨ Features
+- ✅ **Auto-generated support** - All visualizer configs automatically supported via schemas
+- ✅ **Type conversion** - Automatic string → boolean/number/integer conversion  
+- ✅ **Validation** - Min/max constraints and enum checking from schemas
+- ✅ **HashRouter compatible** - Works in both standalone and embedded modes
+- ✅ **Race condition free** - Synchronous parsing during store initialization
+
+### 📝 Usage Examples
+
+```
+# Standalone Mode (port 3001)
+http://localhost:3001/?visual=butterchurn&currentPresetIndex=42
+
+# Integrated Mode (HashRouter)
+http://localhost:3000/#/visualiser?visual=butterchurn&currentPresetIndex=42
+
+# Display Mode (OBS-friendly - no UI chrome)
+http://localhost:3000/#/visualiser?display=true&visual=butterchurn&currentPresetIndex=42
+```
+
+### 🎛️ Available Parameters
+
+#### Core Parameters
+```
+?visual=<name>              # Sets active visualizer (required)
+                            # Examples: butterchurn, fluid, frequencyrings
+```
+
+#### Butterchurn
+```
+?currentPresetIndex=<0-394> # Preset by index
+?currentPresetName=<name>   # Preset by name  
+?cycleInterval=<seconds>    # Auto-cycle interval (default: 25)
+?blendTime=<seconds>        # Blend duration (default: 2.7)
+?shufflePresets=<bool>      # Random preset order
+```
+
+#### Other Visualizers
+All schema properties automatically supported:
+```
+# Fluid
+?fluidDensity=0.98&particleCount=8000
+
+# Frequency Rings  
+?ringCount=10&rotationSpeed=2
+
+# Aurora Borealis
+?waveSpeed=1.5&particleIntensity=0.8
+```
+
+### 🎨 Type Conversion
+
+```typescript
+// Boolean: true/false, 1/0, yes/no
+?shufflePresets=true   → true
+
+// Integer: with min/max validation
+?currentPresetIndex=42 → 42
+
+// Number: float with constraints
+?blendTime=2.5         → 2.5
+
+// Array: JSON or comma-separated
+?colors=red,blue       → ["red", "blue"]
+
+// Object: JSON only
+?position={"x":1}      → {x: 1}
+```
+
+### 📺 OBS Browser Source
+
+```
+URL: http://localhost:3000/#/visualiser
+     ?display=true
+     &visual=butterchurn
+     &currentPresetIndex=42
+     &cycleInterval=30
+     &shufflePresets=true
+
+Width: 1920
+Height: 1080
+FPS: 60
+```
+
+### 🔧 Implementation
+
+Query params are parsed **synchronously** during store initialization (`src/store/queryParamInit.ts`), ensuring the configuration is applied before the first component render, eliminating race conditions.
+
+```typescript
+// Standalone: window.location.search
+// HashRouter: window.location.hash (after '?')
+
+// Automatic schema-based type conversion
+// Butterchurn: initialPresetIndex → loaded on mount
+// Other visualizers: updateVisualizerConfig(type, params)
+```
+
+---
+
 ## 🐛 Debugging
 
 ### Redux DevTools

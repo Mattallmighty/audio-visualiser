@@ -267,9 +267,11 @@ const ButterchurnVisualiser = forwardRef<ButterchurnVisualiserRef, ButterchurnVi
             } else if (config.initialPresetIndex !== undefined && config.initialPresetIndex >= 0 && config.initialPresetIndex < names.length) {
               // Check if URL specified a preset index
               const presetIndex = config.initialPresetIndex
-              const actualIndex = config.shufflePresets ? shuffledIndices[presetIndex] : presetIndex
+              // Use local indices array, not state (which isn't updated yet)
+              const actualIndex = config.shufflePresets ? indices[presetIndex] : presetIndex
               const presetName = names[actualIndex]
               const preset = butterchurnPresets[presetName]
+              
               if (preset) {
                 visualizerRef.current.loadPreset(preset, 0)
                 setCurrentPresetName(presetName)

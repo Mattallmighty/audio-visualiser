@@ -19,7 +19,20 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const OUTPUT_DIR = path.join(__dirname, '../src/_generated/webgl')
+const CACHE_FILE = path.join(OUTPUT_DIR, '.backend-cache.json')
 const GITHUB_API_BASE = 'https://api.github.com/repos/LedFx/LedFx/contents/ledfx/effects'
+
+interface CacheEntry {
+  sha: string
+  content: string
+  schema: EffectSchema
+  lastFetched: string
+}
+
+interface CacheData {
+  etag: string | null
+  files: Record<string, CacheEntry>
+}
 
 /**
  * Frontend-only shaders that don't exist in backend
@@ -64,16 +77,78 @@ interface GitHubFile {
 }
 
 /**
+ * Load cache from disk
+ */
+async function loadCache(): Promise<CacheData> {
+  try {
+    if (await fs.pathExists(CACHE_FILE)) {
+      return await fs.readJson(CACHE_FILE)
+    }
+  } catch (error) {
+    console.log('⚠️  Cache file invalid, will rebuild')
+  }
+  return { etag: null, files: {} }
+}
+
+/**
+ * Save cache to disk
+ */
+async function saveCache(cache: CacheData): Promise<void> {
+  await fs.writeJson(CACHE_FILE, cache, { spaces: 2 })
+}
+
+/**
+ * Fetch directory listing from GitHub API with ETag caching
+ */
+async function fetchGitHubDirectory(etag: string | null = null): Promise<{ files: GitHubFile[], etag: string | null, modified: boolean }> {
+  console.log('📂 Checking effects directory on GitHub...')
+  const headers: Record<string, string> = {}
+  if (etag) {
+    headers['If-None-Match'] = etag
+  }
+  
+  const response = await fetch(GITHUB_API_BASE, { headers })
+  
+  // 304 Not Modified - nothing changed!
+  if (response.status === 304) {
+    console.log('✅ Directory unchanged (ETag match), using cache\n')
+    return { files: [], etag, modified: false }
+  }
+  
+  // Rate limit or other error - if we have an ETag, assume cache is valid
+  if (!response.ok) {
+    if ((response.status === 403 || response.status === 429) && etag) {
+      console.log('⚠️  GitHub rate limit reached, using cached data\n')
+      return { files: [], etag, modified: false }
+    }
+    throw new Error(`Failed to fetch directory: ${response.statusText}`)
+  }
+  
+  const newEtag = response.headers.get('etag')
+  const files = await response.json() as any[]
+  
+  const filteredFiles = files.filter((file: any) => 
+    file.type === 'file' && 
+    file.name.endsWith('.py') &&
+    file.name !== '__init__.py' &&
+    !file.name.startsWith('template')
+  )
+  
+  console.log(`   Found ${filteredFiles.length} Python files\n`)
+  return { files: filteredFiles, etag: newEtag, modified: true }
+}
+
+/**
  * Fetch directory listing from GitHub API
  */
-async function fetchGitHubDirectory(): Promise<GitHubFile[]> {
+async function fetchGitHubDirectoryLegacy(): Promise<GitHubFile[]> {
   console.log('📂 Fetching effects directory from GitHub API...')
   const response = await fetch(GITHUB_API_BASE)
   if (!response.ok) {
     throw new Error(`Failed to fetch directory: ${response.statusText}`)
   }
   
-  const files = await response.json()
+  const files = await response.json() as any[]
   return files.filter((file: any) => 
     file.type === 'file' && 
     file.name.endsWith('.py') &&
@@ -377,43 +452,81 @@ async function main() {
   
   const schemas: Record<string, EffectSchema> = {}
   let processed = 0
+  let cached = 0
   let skipped = 0
 
   try {
-    // Fetch directory listing from GitHub API
-    const files = await fetchGitHubDirectory()
-    console.log(`   Found ${files.length} Python files\n`)
-
-    // Process each Python file
-    for (const file of files) {
-      const effectName = filenameToEffectName(file.name)
-      
-      try {
-        console.log(`Fetching: ${file.download_url}`)
-        const content = await fetchGitHubFile(file.download_url)
-        
-        // Check if this is a Twod-based effect
-        if (!isTwodEffect(content)) {
-          console.log(`⏭️  Skipping ${file.name} (not a Twod effect)`)
-          skipped++
-          continue
-        }
-        
-        // Parse the effect schema
-        const schema = parsePythonEffect(content, effectName)
-        schemas[effectName] = schema
-        processed++
-        console.log(`✅ Discovered ${effectName}`)
-        
-      } catch (error) {
-        console.error(`❌ Failed to process ${file.name}:`, error)
-        skipped++
+    // Load cache
+    const cache = await loadCache()
+    
+    // Fetch directory listing with ETag
+    const { files, etag, modified } = await fetchGitHubDirectory(cache.etag)
+    
+    // If directory hasn't changed and we have cache, use it entirely
+    if (!modified && Object.keys(cache.files).length > 0) {
+      console.log('📦 Using cached schemas (no changes detected)\n')
+      for (const [effectName, entry] of Object.entries(cache.files)) {
+        schemas[effectName] = entry.schema
+        cached++
       }
+    } else {
+      // Directory changed or cache empty - process files
+      const newCache: CacheData = { etag: etag || cache.etag, files: {} }
+      
+      for (const file of files) {
+        const effectName = filenameToEffectName(file.name)
+        
+        try {
+          // Check if file unchanged in cache (by SHA)
+          const cachedEntry = cache.files[effectName]
+          if (cachedEntry && cachedEntry.sha === (file as any).sha) {
+            console.log(`📦 ${effectName} (cached)`)
+            schemas[effectName] = cachedEntry.schema
+            newCache.files[effectName] = cachedEntry
+            cached++
+            continue
+          }
+          
+          // File changed or new - fetch it
+          console.log(`Fetching: ${file.download_url}`)
+          const content = await fetchGitHubFile(file.download_url)
+          
+          // Check if this is a Twod-based effect
+          if (!isTwodEffect(content)) {
+            console.log(`⏭️  Skipping ${file.name} (not a Twod effect)`)
+            skipped++
+            continue
+          }
+          
+          // Parse the effect schema
+          const schema = parsePythonEffect(content, effectName)
+          schemas[effectName] = schema
+          
+          // Cache it
+          newCache.files[effectName] = {
+            sha: (file as any).sha,
+            content,
+            schema,
+            lastFetched: new Date().toISOString()
+          }
+          
+          processed++
+          console.log(`✅ Discovered ${effectName}`)
+          
+        } catch (error) {
+          console.error(`❌ Failed to process ${file.name}:`, error)
+          skipped++
+        }
+      }
+      
+      // Save updated cache
+      await saveCache(newCache)
     }
 
     // Report statistics
     console.log(`\n📊 Discovery Summary:`)
-    console.log(`   ✅ Generated: ${processed} Twod effects`)
+    console.log(`   ✅ Generated: ${processed} new`)
+    console.log(`   📦 Cached: ${cached} unchanged`)
     console.log(`   ⏭️  Skipped: ${skipped} files`)
     console.log(`   📝 Frontend-only: ${FRONTEND_ONLY_SHADERS.length} shaders (${FRONTEND_ONLY_SHADERS.join(', ')})`)
 
@@ -428,18 +541,19 @@ async function main() {
     await fs.writeFile(path.join(OUTPUT_DIR, 'defaults.ts'), defaultsContent)
     await fs.writeFile(path.join(OUTPUT_DIR, 'backend-mapping.ts'), mappingContent)
 
+    console.log(`✅ Generated ${Object.keys(schemas).length} effect schemas`)
     console.log(`   Output: ${path.relative(process.cwd(), OUTPUT_DIR)}`)
 
     console.log('\n🎉 Auto-discovery complete!')
+    if (cached > 0) {
+      console.log(`   ⚡ Cached ${cached} effects (no GitHub requests!)`)
+    }
     console.log('   New Twod effects in backend will be automatically discovered!')
     
   } catch (error) {
     console.error('\n❌ Fatal error during auto-discovery:', error)
     process.exit(1)
   }
-  console.log(`\n✨ Generated ${Object.keys(schemas).length} effect schemas`)
-  console.log(`   Output: ${path.relative(process.cwd(), OUTPUT_DIR)}`)
-  console.log('\n🎉 Backend schema extraction complete!')
 }
 
 main().catch(error => {

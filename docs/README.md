@@ -1,6 +1,20 @@
 # Documentation Index
 
-## 📖 Reference Docs
+## � User Documentation
+
+### **[VISUALISER.md](VISUALISER.md)** ⭐ Start here if you're a LedFx user!
+**Complete guide to using the visualiser feature**
+- What it is and why you'd want it
+- How to use it (background, fullscreen, OBS)
+- All 9 visualizers explained
+- Configuration guide
+- URL parameters for advanced setups
+- Tips, tricks, and troubleshooting
+- Keyboard shortcuts and FAQ
+
+---
+
+## 📖 Developer Reference
 
 Core documentation for understanding and working with the audio visualizer:
 
@@ -24,6 +38,7 @@ Core documentation for understanding and working with the audio visualizer:
 - react-dynamic-module loading pattern
 - Direct store access via useVstore
 - Complete API reference (state + actions)
+- **URL query parameters** (schema-driven, OBS-friendly)
 - Best practices and debugging tips
 
 ### **[GENERATORS.md](GENERATORS.md)**
@@ -38,6 +53,7 @@ Core documentation for understanding and working with the audio visualizer:
 **Store architecture and usage**
 - 5 store slices with complete interfaces
 - Usage patterns (basic, optimized, frontend access)
+- **Query parameter initialization** (race-condition-free)
 - Persistence mechanism (localStorage)
 - Migration system (version-based)
 - DevTools integration
@@ -71,7 +87,10 @@ Historical documentation in [_/](_) folder:
 
 ## 🗺️ Navigation
 
-**New to the project?**  
+**Are you a LedFx user?**  
+Start with [VISUALISER.md](VISUALISER.md) - it's made for you! 🎨
+
+**New to the project as a developer?**  
 Start with [ARCHITECTURE.md](ARCHITECTURE.md) for the full picture.
 
 **Integrating with frontend?**  

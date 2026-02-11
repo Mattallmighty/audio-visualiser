@@ -11,10 +11,8 @@ import {
   Typography,
   IconButton,
   Button,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
+  Autocomplete,
+  TextField,
   Tooltip,
   ToggleButton
 } from '@mui/material'
@@ -31,8 +29,9 @@ import {
 } from '@mui/icons-material'
 import { type FullScreenHandle } from 'react-full-screen'
 import { type WebGLVisualisationType } from '..'
-import { type VisualisationType, getVisualizersByCategory, CATEGORY_ORDER } from '../../../engines/webgl/registry'
+import { type VisualisationType } from '../../../engines/webgl/registry'
 import { useStore } from '../../../store'
+import { type VisualizerOption } from '../../../store/visualizer/storeVisualizer'
 import { AudioStatus, AudioSelector, AudioInputSelector } from '../../Audio'
 
 interface VisualizerControlsProps {
@@ -75,6 +74,7 @@ const VisualizerControls: React.FC<VisualizerControlsProps> = ({
   startSystemAudio
 }) => {
   const visualType = useStore(state => state.visualType)
+  const visualizers = useStore(state => state.visualizers)
   const audioSource = useStore(state => state.audioSource)
   const autoChange = useStore(state => state.autoChange)
   const setAutoChange = useStore(state => state.setAutoChange)
@@ -127,33 +127,21 @@ const VisualizerControls: React.FC<VisualizerControlsProps> = ({
             </IconButton>
           </Tooltip>
 
-          <FormControl size="small" sx={{ minWidth: 200 }}>
-            <InputLabel>Visualization</InputLabel>
-            <Select
-              value={visualType}
-              label="Visualization"
-              onChange={(e) => handleTypeChange(e.target.value as WebGLVisualisationType)}
-            >
-              {CATEGORY_ORDER.flatMap(category => {
-                const visualizers = getVisualizersByCategory()[category]
-                if (!visualizers || visualizers.length === 0) return []
-                return [
-                  <MenuItem 
-                    key={`header-${category}`} 
-                    disabled 
-                    sx={{ opacity: 0.5, fontSize: '0.75rem', mt: 1 }}
-                  >
-                    {category}
-                  </MenuItem>,
-                  ...visualizers.map(v => (
-                    <MenuItem key={v.id} value={v.id}>
-                      {v.displayName}
-                    </MenuItem>
-                  ))
-                ]
-              })}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            size="small"
+            sx={{ minWidth: 200 }}
+            options={visualizers}
+            groupBy={(option) => option.category}
+            getOptionLabel={(option) => option.displayName}
+            value={visualizers.find((v: VisualizerOption) => v.id === visualType) || null}
+            onChange={(_, newValue) => {
+              if (newValue) handleTypeChange(newValue.id as WebGLVisualisationType)
+            }}
+            renderInput={(params) => (
+              <TextField {...params} label="Visualization" />
+            )}
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+          />
 
           <Tooltip title="Next visualizer">
             <IconButton

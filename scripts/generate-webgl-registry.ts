@@ -95,6 +95,25 @@ export function getWebGLVisualizerMetadata(id: string): WebGLVisualizerMetadata 
 export function isWebGLVisualizer(id: string): id is WebGLVisualiserId {
   return id in WEBGL_VISUALIZERS
 }
+
+/**
+ * WebGL Visualizer option for Autocomplete with category metadata
+ */
+export interface WebGLVisualizerOption {
+  id: string
+  displayName: string
+  category: string
+}
+
+/**
+ * All WebGL visualizers as flat array (for Autocomplete groupBy)
+ * Static const array - computed at build time
+ */
+export const ALL_WEBGL_VISUALIZERS: WebGLVisualizerOption[] = [
+${Object.entries(metadata.visualizers).map(([id, meta]) => 
+  `  { id: '${id}', displayName: '${meta.displayName}', category: '${meta.category}' }`
+).join(',\n')}
+]
 `
 }
 

@@ -355,6 +355,23 @@ export function getVisualizerUISchema(id: string, config?: any) {
 export function getVisualizerIds(): string[] {
   return Object.keys(VISUALIZER_REGISTRY)
 }
+
+/**
+ * Visualizer option for Autocomplete with category metadata
+ */
+export interface VisualizerOption {
+  id: string
+  displayName: string
+  category: string
+}
+
+/**
+ * All visualizers as flat array (for Autocomplete groupBy)
+ * Static const array - computed at build time
+ */
+export const ALL_VISUALIZERS: VisualizerOption[] = [
+${schemas.map(s => `  { id: '${s.$id}', displayName: '${s.displayName}', category: '${s.metadata?.category || 'Other'}' }`).join(',\n')}
+]
 `
   
   // Import types and defaults into UI schemas

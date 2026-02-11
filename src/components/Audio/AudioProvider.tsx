@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useCallback, useRef, ReactNode } from 'react'
 import { useStore } from '../../store'
 import useAudioAnalyser from '../../engines/audio/useAudioAnalyser'
 import { calculateFrequencyBands } from '../../utils/audio'
@@ -81,11 +81,13 @@ export const AudioProvider = ({ backendAudioData, children }: AudioProviderProps
     }
   }, [hasBackend, audioSource, setAudioSource])
 
-  // Auto-play when backend audio is available (integrated mode)
+  // Auto-play when backend audio is available (integrated mode) - only on initial load
+  const hasInitializedBackend = useRef(false)
   useEffect(() => {
     if (hasBackend && audioSource === 'backend' && backendAudioData && backendAudioData.length > 0) {
-      if (!isPlaying) {
+      if (!hasInitializedBackend.current && !isPlaying) {
         setIsPlaying(true)
+        hasInitializedBackend.current = true
       }
     }
   }, [hasBackend, audioSource, backendAudioData, isPlaying, setIsPlaying])
