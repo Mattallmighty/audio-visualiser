@@ -74,7 +74,7 @@ const VisualizerControls: React.FC<VisualizerControlsProps> = ({
   startSystemAudio
 }) => {
   const visualType = useStore(state => state.visualType)
-  const visualizers = useStore(state => state.visualizers)
+  const allVisualizers = useStore(state => state.visualizers)
   const audioSource = useStore(state => state.audioSource)
   const autoChange = useStore(state => state.autoChange)
   const setAutoChange = useStore(state => state.setAutoChange)
@@ -84,7 +84,31 @@ const VisualizerControls: React.FC<VisualizerControlsProps> = ({
   const setShowFxPanel = useStore(state => state.setShowFxPanel)
   const isPlaying = useStore(state => state.isPlaying)
   const setIsPlaying = useStore(state => state.setIsPlaying)
-  
+
+  // Define custom category order (Preset Player first, then Compositional, etc.)
+  const CATEGORY_ORDER: Record<string, number> = {
+    'Preset Player': 1,
+    'Compositional': 2,
+    'Simulation': 3,
+    'Natural': 4,
+    'Original Effects': 5,
+    '2D Effects': 6,
+    'Matrix Effects': 7
+  }
+
+  // Sort visualizers by category order, then by displayName
+  // This prevents MUI Autocomplete duplicate headers warning
+  const visualizers = React.useMemo(() => {
+    return [...allVisualizers].sort((a, b) => {
+      const orderA = CATEGORY_ORDER[a.category] ?? 999
+      const orderB = CATEGORY_ORDER[b.category] ?? 999
+      if (orderA !== orderB) {
+        return orderA - orderB
+      }
+      return a.displayName.localeCompare(b.displayName)
+    })
+  }, [allVisualizers])
+
   return (
     <Box
       sx={{

@@ -233,14 +233,11 @@ export interface ImageLayer extends AstrofoxLayerBase {
   type: 'image'
   imageUrl: string
   imageData: string // Base64 data URL
-  width: number // percentage of canvas width (0-100)
-  height: number // percentage of canvas height (0-100)
+  width: number
+  height: number
   naturalWidth: number
   naturalHeight: number
-  fixed: boolean // Fixed position
-  maintainAspectRatio: boolean // Preserve image aspect ratio
-  audioReactive: boolean
-  reactiveScale: number
+  fixed: boolean // Maintain aspect ratio
 }
 
 // NEW: 3D Geometry Layer
@@ -428,14 +425,11 @@ const DEFAULT_IMAGE: Omit<ImageLayer, 'id' | 'name'> = {
   scale: 1,
   imageUrl: '',
   imageData: '',
-  width: 30, // percentage of screen
-  height: 30, // percentage of screen
+  width: 0, // 0 = auto (will be set to canvas size on upload)
+  height: 0,
   naturalWidth: 0,
   naturalHeight: 0,
-  fixed: false,
-  maintainAspectRatio: true,
-  audioReactive: true,
-  reactiveScale: 0.15
+  fixed: false
 }
 
 // NEW: 3D Geometry defaults
@@ -476,10 +470,87 @@ const DEFAULT_GROUP: Omit<GroupLayer, 'id' | 'name'> = {
   childIds: []
 }
 
-// --- Import Presets from centralized location ---
-import { PRESET_LAYERS, ASTROFOX_PRESETS, getAstrofoxPresetLayers } from '../../engines/astrofox/presets/defaults'
-export { ASTROFOX_PRESETS, getAstrofoxPresetLayers }
-export type AstrofoxPresetName = (typeof ASTROFOX_PRESETS)[number]
+// --- Built-in Presets ---
+const PRESET_LAYERS: Record<string, AstrofoxLayer[]> = {
+  default: [
+    {
+      id: 'default_bars',
+      name: 'Spectrum Bars',
+      ...DEFAULT_BAR_SPECTRUM,
+      y: 300,
+      width: 1000,
+      height: 250
+    },
+    {
+      id: 'default_wave',
+      name: 'Wave Overlay',
+      ...DEFAULT_WAVE_SPECTRUM,
+      y: 200,
+      width: 1000,
+      height: 200,
+      blendMode: 'screen',
+      opacity: 0.7
+    },
+    {
+      id: 'default_text',
+      name: 'Title',
+      ...DEFAULT_TEXT,
+      y: -250,
+      fontSize: 72,
+      text: 'LedFX'
+    }
+  ],
+  minimal: [
+    {
+      id: 'minimal_wave',
+      name: 'Sound Wave',
+      ...DEFAULT_SOUND_WAVE,
+      width: 1200,
+      height: 300
+    }
+  ],
+  neon: [
+    {
+      id: 'neon_bars',
+      name: 'Neon Bars',
+      ...DEFAULT_BAR_SPECTRUM,
+      y: 200,
+      width: 1000,
+      height: 300,
+      barColor: '#00ff88',
+      barColorEnd: '#00ffff',
+      shadowColor: '#003322',
+      blendMode: 'screen'
+    },
+    {
+      id: 'neon_circle',
+      name: 'Neon Circle',
+      ...DEFAULT_SOUND_WAVE_2,
+      y: -100,
+      radius: 180,
+      lineColor: '#ff00ff',
+      blendMode: 'screen'
+    }
+  ],
+  '3d': [
+    {
+      id: '3d_cube',
+      name: '3D Cube',
+      ...DEFAULT_GEOMETRY_3D,
+      shape: 'Box',
+      size: 200,
+      color: '#6366f1'
+    },
+    {
+      id: '3d_bars',
+      name: 'Bars Below',
+      ...DEFAULT_BAR_SPECTRUM,
+      y: 350,
+      width: 800,
+      height: 150
+    }
+  ]
+}
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const DEFAULT_ASTROFOX_CONFIG: AstrofoxConfig = {
@@ -487,6 +558,14 @@ export const DEFAULT_ASTROFOX_CONFIG: AstrofoxConfig = {
   backgroundColor: '#0f0f23',
   width: 1920,
   height: 1080
+}
+
+export const ASTROFOX_PRESETS = ['default', 'minimal', 'neon', '3d'] as const
+export type AstrofoxPresetName = typeof ASTROFOX_PRESETS[number]
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function getAstrofoxPresetLayers(preset: AstrofoxPresetName): AstrofoxLayer[] {
+  return JSON.parse(JSON.stringify(PRESET_LAYERS[preset] || PRESET_LAYERS.default))
 }
 
 // --- Layer Type Icons ---
@@ -1260,7 +1339,7 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
       (
         ctx: CanvasRenderingContext2D,
         layer: ImageLayer,
-        data: AudioDataArray,
+        _data: AudioDataArray,
         centerX: number,
         centerY: number
       ) => {
@@ -1281,38 +1360,15 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
 
         if (!img.complete) return
 
-        // Convert percentage to pixels based on canvas size
-        const canvasWidth = ctx.canvas.width
-        const canvasHeight = ctx.canvas.height
-        let drawWidth = (layer.width / 100) * canvasWidth
-        let drawHeight = (layer.height / 100) * canvasHeight
-
-        // Maintain aspect ratio if enabled
-        // Use actual image dimensions directly from the loaded image
-        if (layer.maintainAspectRatio && img.naturalWidth > 0 && img.naturalHeight > 0) {
-          const aspectRatio = img.naturalWidth / img.naturalHeight
-          // Use width as the primary dimension and calculate height to maintain aspect
-          drawHeight = drawWidth / aspectRatio
-        }
-
-        // Calculate audio reactive scale
-        let audioScale = 1
-        if (layer.audioReactive && data && data.length > 0) {
-          // Use average of audio data for reactive scaling
-          let sum = 0
-          for (let i = 0; i < data.length; i++) {
-            sum += Math.abs(data[i])
-          }
-          const avg = sum / data.length
-          audioScale = 1 + avg * layer.reactiveScale
-        }
-
         ctx.save()
         ctx.translate(centerX + layer.x, centerY + layer.y)
         ctx.rotate((layer.rotation * Math.PI) / 180)
-        ctx.scale(layer.scale * audioScale, layer.scale * audioScale)
+        ctx.scale(layer.scale, layer.scale)
         ctx.globalAlpha = layer.opacity
         ctx.globalCompositeOperation = getCompositeOperation(layer.blendMode)
+
+        const drawWidth = layer.width || img.naturalWidth
+        const drawHeight = layer.height || img.naturalHeight
 
         ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
 
@@ -2543,87 +2599,313 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
       )
     }
 
+    // Render controls function - exposed via ref for external rendering
+    const renderControls = useCallback((): React.ReactNode => {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'row', overflow: 'hidden', maxHeight: 500 }}>
+          {/* Layers Section */}
+          <Box sx={{ width: 280, borderRight: 1, borderColor: 'divider', overflow: 'auto' }}>
+            <ListItemButton onClick={() => setLayersExpanded(!layersExpanded)}>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <Layers fontSize="small" />
+              </ListItemIcon>
+              <ListItemText primary="LAYERS" primaryTypographyProps={{ variant: 'overline' }} />
+              {layersExpanded ? <ExpandLess /> : <ExpandMore />}
+            </ListItemButton>
 
-    // Reorder layer function (for external use via ref)
-    const reorderLayer = useCallback(
-      (draggedId: string, targetId: string, position: 'above' | 'below' | 'inside') => {
-        if (!draggedId || draggedId === targetId) return
+            <Collapse in={layersExpanded}>
+              <List dense sx={{ maxHeight: 250, overflow: 'auto', py: 0 }}>
+                {[...topLevelLayers].reverse().map((layer) => {
+                  const isGroup = layer.type === 'group'
+                  const groupLayer = isGroup ? (layer as GroupLayer) : null
+                  const isExpanded = expandedGroups.has(layer.id)
+                  const isDragging = draggedLayerId === layer.id
+                  const isDropTarget = dropTargetId === layer.id
+                  const showDropAbove = isDropTarget && dropPosition === 'above'
+                  const showDropBelow = isDropTarget && dropPosition === 'below'
+                  const showDropInside = isDropTarget && dropPosition === 'inside' && isGroup
 
-        const draggedLayer = config.layers.find((l) => l.id === draggedId)
-        const targetLayer = config.layers.find((l) => l.id === targetId)
+                  return (
+                    <Box key={layer.id}>
+                      <ListItem
+                        disablePadding
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, layer.id)}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={(e) => handleDragOver(e, layer.id, isGroup)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, layer.id)}
+                        sx={{
+                          opacity: isDragging ? 0.5 : 1,
+                          bgcolor: showDropInside ? 'action.hover' : 'transparent',
+                          borderTop: showDropAbove ? '2px solid' : 'none',
+                          borderBottom: showDropBelow ? '2px solid' : 'none',
+                          borderLeft: showDropInside ? '3px solid' : 'none',
+                          borderColor: 'primary.main',
+                          cursor: 'grab',
+                          transition: 'border 0.1s ease'
+                        }}
+                        secondaryAction={
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            {isGroup && groupLayer && groupLayer.childIds.length > 0 && (
+                              <IconButton
+                                edge="end"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  toggleGroupExpanded(layer.id)
+                                }}
+                              >
+                                {isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+                              </IconButton>
+                            )}
+                            <IconButton
+                              edge="end"
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleLayerVisibility(layer.id)
+                              }}
+                            >
+                              {layer.visible ? (
+                                <Visibility fontSize="small" />
+                              ) : (
+                                <VisibilityOff fontSize="small" />
+                              )}
+                            </IconButton>
+                          </Box>
+                        }
+                      >
+                        <ListItemButton
+                          selected={selectedLayerId === layer.id}
+                          onClick={() => setSelectedLayerId(layer.id)}
+                          sx={{ py: 0.5 }}
+                        >
+                          <ListItemIcon sx={{ minWidth: 32 }}>{LAYER_ICONS[layer.type]}</ListItemIcon>
+                          <ListItemText
+                            primary={layer.name}
+                            primaryTypographyProps={{
+                              variant: 'body2',
+                              sx: { opacity: layer.visible ? 1 : 0.5 }
+                            }}
+                          />
+                        </ListItemButton>
+                      </ListItem>
 
-        if (!draggedLayer || !targetLayer) return
+                      {/* Render children of groups */}
+                      {isGroup && groupLayer && isExpanded && (
+                        <Collapse in={isExpanded}>
+                          <List dense sx={{ py: 0, pl: 2, borderLeft: '1px solid', borderColor: 'divider', ml: 2 }}>
+                            {groupLayer.childIds.map((childId) => {
+                              const childLayer = config.layers.find((l) => l.id === childId)
+                              if (!childLayer) return null
+                              const isChildDragging = draggedLayerId === childId
+                              const isChildDropTarget = dropTargetId === childId
+                              const showChildDropAbove = isChildDropTarget && dropPosition === 'above'
+                              const showChildDropBelow = isChildDropTarget && dropPosition === 'below'
 
-        // Remove from current parent if any
-        const currentParent = findParentGroup(draggedId)
-        let updatedLayers = [...config.layers]
+                              return (
+                                <ListItem
+                                  key={childId}
+                                  disablePadding
+                                  draggable
+                                  onDragStart={(e) => handleDragStart(e, childId)}
+                                  onDragEnd={handleDragEnd}
+                                  onDragOver={(e) => handleDragOver(e, childId, false)}
+                                  onDragLeave={handleDragLeave}
+                                  onDrop={(e) => handleDrop(e, childId)}
+                                  sx={{
+                                    opacity: isChildDragging ? 0.5 : 1,
+                                    cursor: 'grab',
+                                    borderTop: showChildDropAbove ? '2px solid' : 'none',
+                                    borderBottom: showChildDropBelow ? '2px solid' : 'none',
+                                    borderColor: 'primary.main',
+                                    transition: 'border 0.1s ease'
+                                  }}
+                                  secondaryAction={
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                      <Tooltip title="Remove from group">
+                                        <IconButton
+                                          edge="end"
+                                          size="small"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            removeFromGroup(childId)
+                                          }}
+                                        >
+                                          <KeyboardArrowUp fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                      <IconButton
+                                        edge="end"
+                                        size="small"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          toggleLayerVisibility(childId)
+                                        }}
+                                      >
+                                        {childLayer.visible ? (
+                                          <Visibility fontSize="small" />
+                                        ) : (
+                                          <VisibilityOff fontSize="small" />
+                                        )}
+                                      </IconButton>
+                                    </Box>
+                                  }
+                                >
+                                  <ListItemButton
+                                    selected={selectedLayerId === childId}
+                                    onClick={() => setSelectedLayerId(childId)}
+                                    sx={{ py: 0.5 }}
+                                  >
+                                    <ListItemIcon sx={{ minWidth: 32 }}>{LAYER_ICONS[childLayer.type]}</ListItemIcon>
+                                    <ListItemText
+                                      primary={childLayer.name}
+                                      primaryTypographyProps={{
+                                        variant: 'body2',
+                                        sx: { opacity: childLayer.visible ? 1 : 0.5 }
+                                      }}
+                                    />
+                                  </ListItemButton>
+                                </ListItem>
+                              )
+                            })}
+                          </List>
+                        </Collapse>
+                      )}
+                    </Box>
+                  )
+                })}
+              </List>
 
-        if (currentParent) {
-          updatedLayers = updatedLayers.map((l) =>
-            l.id === currentParent.id
-              ? { ...l, childIds: (l as GroupLayer).childIds.filter((id) => id !== draggedId) }
-              : l
-          )
-        }
+              {/* Add Layer Buttons */}
+              <Box sx={{ p: 1, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                <Tooltip title="Bar Spectrum">
+                  <IconButton size="small" onClick={() => addLayer('barSpectrum')}>
+                    <BarChart fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Geometry (3D)">
+                  <IconButton size="small" onClick={() => addLayer('geometry3d')}>
+                    <ViewInAr fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Image">
+                  <IconButton size="small" onClick={() => addLayer('image')}>
+                    <ImageIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Soundwave">
+                  <IconButton size="small" onClick={() => addLayer('soundWave')}>
+                    <Timeline fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Text">
+                  <IconButton size="small" onClick={() => addLayer('text')}>
+                    <TextFields fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Wave Spectrum">
+                  <IconButton size="small" onClick={() => addLayer('waveSpectrum')}>
+                    <GraphicEq fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Sound Wave 2">
+                  <IconButton size="small" onClick={() => addLayer('soundWave2')}>
+                    <GraphicEq fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Group">
+                  <IconButton size="small" onClick={() => addLayer('group')}>
+                    <Folder fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            </Collapse>
+          </Box>
 
-        // Handle different drop positions
-        if (position === 'inside' && targetLayer.type === 'group') {
-          // Drop inside a group
-          updatedLayers = updatedLayers.map((l) =>
-            l.id === targetId
-              ? { ...l, childIds: [...(l as GroupLayer).childIds, draggedId] }
-              : l
-          )
-          setExpandedGroups((prev) => {
-            const next = new Set(prev)
-            next.add(targetId)
-            return next
-          })
-        } else {
-          // Reorder - insert above or below target
-          updatedLayers = updatedLayers.filter((l) => l.id !== draggedId)
-          const targetIndex = updatedLayers.findIndex((l) => l.id === targetId)
-          if (targetIndex !== -1) {
-            const insertIndex = position === 'above' ? targetIndex : targetIndex + 1
-            updatedLayers.splice(insertIndex, 0, draggedLayer)
-          }
-        }
+          {/* Controls Section */}
+          <Box sx={{ flex: 1, overflow: 'auto' }}>
+            <ListItemButton onClick={() => setControlsExpanded(!controlsExpanded)}>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <Tune fontSize="small" />
+              </ListItemIcon>
+              <ListItemText primary="CONTROLS" primaryTypographyProps={{ variant: 'overline' }} />
+              {controlsExpanded ? <ExpandLess /> : <ExpandMore />}
+            </ListItemButton>
 
-        onConfigChange?.({ layers: updatedLayers })
-      },
-      [config.layers, findParentGroup, onConfigChange]
-    )
+            <Collapse in={controlsExpanded}>
+              {selectedLayer && (
+                <Box sx={{ p: 1, display: 'flex', gap: 0.5 }}>
+                  <Tooltip title="Move Up">
+                    <IconButton size="small" onClick={() => moveLayer(selectedLayer.id, 'up')}>
+                      <KeyboardArrowUp fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Move Down">
+                    <IconButton size="small" onClick={() => moveLayer(selectedLayer.id, 'down')}>
+                      <KeyboardArrowDown fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Duplicate">
+                    <IconButton size="small" onClick={() => duplicateLayer(selectedLayer.id)}>
+                      <ContentCopy fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete">
+                    <IconButton
+                      size="small"
+                      onClick={() => removeLayer(selectedLayer.id)}
+                      color="error"
+                    >
+                      <Delete fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              )}
+              {renderLayerControls()}
+            </Collapse>
+          </Box>
+        </Box>
+      )
+    }, [
+      layersExpanded,
+      controlsExpanded,
+      topLevelLayers,
+      expandedGroups,
+      draggedLayerId,
+      dropTargetId,
+      dropPosition,
+      selectedLayerId,
+      selectedLayer,
+      config.layers,
+      addLayer,
+      removeLayer,
+      duplicateLayer,
+      moveLayer,
+      toggleLayerVisibility,
+      toggleGroupExpanded,
+      removeFromGroup,
+      handleDragStart,
+      handleDragEnd,
+      handleDragOver,
+      handleDragLeave,
+      handleDrop,
+      renderLayerControls
+    ])
 
     // Expose methods via ref
     useImperativeHandle(
       ref,
       () => ({
         getCanvas: () => canvasRef.current,
-        layers: config.layers,
-        selectedLayerId,
-        setSelectedLayerId,
         addLayer,
         removeLayer,
         duplicateLayer,
         moveLayer,
-        updateLayer,
-        toggleLayerVisibility,
-        removeFromGroup,
-        reorderLayer
+        renderControls
       }),
-      [
-        config.layers,
-        selectedLayerId,
-        setSelectedLayerId,
-        addLayer,
-        removeLayer,
-        duplicateLayer,
-        moveLayer,
-        updateLayer,
-        toggleLayerVisibility,
-        removeFromGroup,
-        reorderLayer
-      ]
+      [addLayer, removeLayer, duplicateLayer, moveLayer, renderControls]
     )
 
     return (

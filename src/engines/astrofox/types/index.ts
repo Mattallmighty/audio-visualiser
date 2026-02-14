@@ -142,11 +142,14 @@ export interface ImageLayer extends AstrofoxLayerBase {
   type: 'image'
   imageUrl: string
   imageData: string
-  width: number
-  height: number
+  width: number // percentage of canvas width (0-100)
+  height: number // percentage of canvas height (0-100)
   naturalWidth: number
   naturalHeight: number
   fixed: boolean
+  maintainAspectRatio: boolean // preserve image aspect ratio
+  audioReactive: boolean
+  reactiveScale: number
 }
 
 export interface Geometry3DLayer extends AstrofoxLayerBase {
@@ -193,11 +196,18 @@ export interface AstrofoxConfig {
 // --- Ref Interface ---
 export interface AstrofoxVisualiserRef {
   getCanvas: () => HTMLCanvasElement | null
+  // Layer management
+  layers: AstrofoxLayer[]
+  selectedLayerId: string | null
+  setSelectedLayerId: (id: string | null) => void
   addLayer: (type: AstrofoxLayerType) => void
   removeLayer: (id: string) => void
   duplicateLayer: (id: string) => void
   moveLayer: (id: string, direction: 'up' | 'down') => void
-  renderControls: () => React.ReactNode
+  updateLayer: (id: string, updates: Partial<AstrofoxLayer>) => void
+  toggleLayerVisibility: (id: string) => void
+  removeFromGroup?: (childId: string) => void
+  reorderLayer?: (draggedId: string, targetId: string, position: 'above' | 'below' | 'inside') => void
 }
 
 // --- Props Interface ---
