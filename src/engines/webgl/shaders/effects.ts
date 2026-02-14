@@ -1844,7 +1844,7 @@ export const soapShader = `
     thickness += sin(length(uv) * 25.0 - time * 1.5 + u_mid * 3.0);
     thickness += sin(uv.x * uv.y * 30.0 + time * 0.5);
 
-    thickness = thickness * 0.1 + 0.5;
+    thickness = clamp(thickness * 0.1 + 0.5, 0.0, 1.0);
 
     // Iridescent color (thin film interference)
     float hue = fract(thickness * 2.0 + time * 0.1);
@@ -1863,6 +1863,9 @@ export const soapShader = `
 
     // Beat flash
     color *= 1.0 + u_beat * 0.2;
+
+    // Clamp final color to prevent brightness blowout
+    color = clamp(color, 0.0, 1.0);
 
     gl_FragColor = vec4(color, 1.0);
   }
