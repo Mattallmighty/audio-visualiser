@@ -33,6 +33,7 @@ import { type VisualisationType } from '../../../engines/webgl/registry'
 import { useStore } from '../../../store'
 import { type VisualizerOption } from '../../../store/visualizer/storeVisualizer'
 import { AudioStatus, AudioSelector, AudioInputSelector } from '../../Audio'
+import { version } from '../../../../package.json'
 
 interface VisualizerControlsProps {
   onClose?: () => void
@@ -107,6 +108,7 @@ const VisualizerControls: React.FC<VisualizerControlsProps> = ({
       }
       return a.displayName.localeCompare(b.displayName)
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allVisualizers])
 
   return (
@@ -122,7 +124,13 @@ const VisualizerControls: React.FC<VisualizerControlsProps> = ({
     >
       <Box>
         <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <MusicNote /> Audio Visualiser
+          <MusicNote /> Audio Visualiser <span style={{
+            fontSize: '0.8rem',
+            color: '#999',
+            alignSelf: 'flex-end',
+            paddingBottom: '3px',
+            paddingLeft: '5px'
+          }}>{version}</span>
           {onClose && (
             <IconButton onClick={onClose} size="small" sx={{ ml: 'auto' }}>
               <FullscreenExit />
