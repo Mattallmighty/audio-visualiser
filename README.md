@@ -1,4 +1,4 @@
-# Audio Visualiser
+# Audio Visualiser!
 
 [![original author](https://img.shields.io/badge/ORIGINAL_AUTHOR-mattallmighty-purple.svg?logo=github&logoColor=white)](https://github.com/mattallmighty) [![refactored by](https://img.shields.io/badge/REFACTORED_BY-Blade-darkred.svg?logo=github&logoColor=white)](https://github.com/mattallmighty) [![live demo](https://img.shields.io/badge/LIVE_DEMO-GitHub_Pages-00ADD8.svg?logo=react&logoColor=white)](https://mattallmighty.github.io/audio-visualiser/)
 
