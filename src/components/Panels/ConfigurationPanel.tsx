@@ -218,13 +218,6 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
                       backgroundColor: astrofoxConfig.backgroundColor
                     }
 
-                    // Log preset configuration
-                    console.log('=== Saving Custom Preset ===')
-                    console.log('Name:', presetData.name)
-                    console.log('Background Color:', presetData.backgroundColor)
-                    console.log('Layers:', JSON.stringify(presetData.layers, null, 2))
-                    console.log('========================')
-
                     saveCustomAstrofoxPreset(
                       presetData.name,
                       presetData.layers,
@@ -246,10 +239,6 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
                   size="small"
                   onClick={() => {
                     const presetLayers = getAstrofoxPresetLayers(preset)
-                    console.log(`=== Loading Preset: "${preset}" ===`)
-                    console.log('Layers:', JSON.stringify(presetLayers, null, 2))
-                    console.log('Number of layers:', presetLayers.length)
-                    console.log('================================')
                     setAstrofoxConfig((prev: any) => ({
                       ...prev,
                       layers: presetLayers

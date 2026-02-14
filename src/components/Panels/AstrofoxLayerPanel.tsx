@@ -67,14 +67,16 @@ export function AstrofoxLayerPanel({ astrofoxRef }: AstrofoxLayerPanelProps) {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
 
-  // Access layers directly from the astrofox ref
-  const [, forceUpdate] = useState({})
-  const layers = astrofoxRef.current?.layers || []
+  // Store layers in state to prevent infinite loops
+  // Only update when the actual layers array reference changes
+  const [layers, setLayers] = useState<AstrofoxLayer[]>(() => astrofoxRef.current?.layers || [])
 
   // Force re-render when layers change
+  // Called explicitly after layer operations (add, remove, update, etc.)
   const refreshLayers = useCallback(() => {
-    forceUpdate({})
-  }, [])
+    const currentLayers = astrofoxRef.current?.layers || []
+    setLayers([...currentLayers]) // Create new reference to trigger updates
+  }, [astrofoxRef])
 
   // Calculate top-level layers (not inside any group)
   const topLevelLayers = useMemo(() => {
@@ -104,22 +106,6 @@ export function AstrofoxLayerPanel({ astrofoxRef }: AstrofoxLayerPanelProps) {
       }
     }
   }, [selectedLayerId, topLevelLayers])
-
-  // Trigger refresh when layers are first loaded or preset changes
-  useEffect(() => {
-    const checkLayers = () => {
-      const currentLayers = astrofoxRef.current?.layers || []
-      if (currentLayers.length > 0 && !selectedLayerId) {
-        forceUpdate({})
-      }
-    }
-
-    // Check immediately and after a short delay to catch preset loads
-    checkLayers()
-    const timer = setTimeout(checkLayers, 100)
-
-    return () => clearTimeout(timer)
-  }, [astrofoxRef, selectedLayerId])
 
   // Layer operations (call methods on astrofoxRef)
   const addLayer = useCallback(
