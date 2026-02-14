@@ -1,12 +1,19 @@
 import type { ButterchurnConfig } from '../../components/Visualisers/ButterchurnVisualiser'
-import type { AstrofoxConfig } from '../../components/Visualisers/AstrofoxVisualiser'
+import type { AstrofoxConfig, AstrofoxLayer } from '../../components/Visualisers/AstrofoxVisualiser'
 import { DEFAULT_ASTROFOX_CONFIG } from '../../components/Visualisers/AstrofoxVisualiser'
 import { getVisualizerConfig } from '../../_generated/registry'
+
+export interface CustomAstrofoxPreset {
+  name: string
+  layers: AstrofoxLayer[]
+  backgroundColor: string
+}
 
 export interface StoreConfigsState {
   butterchurnConfig: ButterchurnConfig
   butterchurnPresetNames: string[]
   astrofoxConfig: AstrofoxConfig
+  customAstrofoxPresets: CustomAstrofoxPreset[]
   visualizerConfigs: Record<string, any>
   astrofoxReady: boolean
 }
@@ -17,6 +24,9 @@ export interface StoreConfigsActions {
   setButterchurnPresetNames: (names: string[]) => void
   setAstrofoxConfig: (config: AstrofoxConfig | ((prev: AstrofoxConfig) => AstrofoxConfig)) => void
   updateAstrofoxConfig: (partial: Partial<AstrofoxConfig>) => void
+  saveCustomAstrofoxPreset: (name: string, layers: AstrofoxLayer[], backgroundColor: string) => void
+  deleteCustomAstrofoxPreset: (name: string) => void
+  loadCustomAstrofoxPresets: () => void
   setVisualizerConfig: (id: string, config: any) => void
   updateVisualizerConfig: (id: string, partial: any) => void
   setAstrofoxReady: (ready: boolean) => void
@@ -45,15 +55,26 @@ const storeConfigs = (set: any, get: any) => {
     initialPresetIndex: 0  // Signal to load preset 0 on mount
   }
 
+  // Load custom presets from localStorage
+  const loadedCustomPresets = (() => {
+    try {
+      const stored = localStorage.getItem('customAstrofoxPresets')
+      return stored ? JSON.parse(stored) : []
+    } catch {
+      return []
+    }
+  })()
+
   return {
     // State
     butterchurnConfig: butterchurnDefaultConfig,
     butterchurnPresetNames: [],
-    
+
     astrofoxConfig: DEFAULT_ASTROFOX_CONFIG,
-    
+    customAstrofoxPresets: loadedCustomPresets,
+
     visualizerConfigs: initialConfigs,
-    
+
     astrofoxReady: false,
 
   // Actions
@@ -79,6 +100,33 @@ const storeConfigs = (set: any, get: any) => {
     set((state: any) => ({
       astrofoxConfig: { ...state.astrofoxConfig, ...partial }
     })),
+
+  saveCustomAstrofoxPreset: (name: string, layers: AstrofoxLayer[], backgroundColor: string) => {
+    const newPreset: CustomAstrofoxPreset = { name, layers: JSON.parse(JSON.stringify(layers)), backgroundColor }
+    set((state: any) => {
+      const updatedPresets = [...state.customAstrofoxPresets.filter((p: CustomAstrofoxPreset) => p.name !== name), newPreset]
+      localStorage.setItem('customAstrofoxPresets', JSON.stringify(updatedPresets))
+      return { customAstrofoxPresets: updatedPresets }
+    })
+  },
+
+  deleteCustomAstrofoxPreset: (name: string) => {
+    set((state: any) => {
+      const updatedPresets = state.customAstrofoxPresets.filter((p: CustomAstrofoxPreset) => p.name !== name)
+      localStorage.setItem('customAstrofoxPresets', JSON.stringify(updatedPresets))
+      return { customAstrofoxPresets: updatedPresets }
+    })
+  },
+
+  loadCustomAstrofoxPresets: () => {
+    try {
+      const stored = localStorage.getItem('customAstrofoxPresets')
+      const presets = stored ? JSON.parse(stored) : []
+      set({ customAstrofoxPresets: presets })
+    } catch {
+      set({ customAstrofoxPresets: [] })
+    }
+  },
 
   setVisualizerConfig: (id: string, config: any) =>
     set((state: any) => ({

@@ -20,6 +20,8 @@ import VisualizerControls from './components/Visualisers/Base/VisualizerControls
 import ConfigurationPanel from './components/Panels/ConfigurationPanel'
 import PresetsPanel from './components/Panels/PresetsPanel'
 import { ThemeProvider } from '@mui/material/styles'
+import { Grid } from '@mui/material'
+import AstrofoxLayerPanel from './components/Panels/AstrofoxLayerPanel'
 
 const VisualiserIsoInner = (
   {
@@ -140,23 +142,29 @@ const VisualiserIsoInner = (
         </CanvasCard>
         {!configData?.background && showOverlays && (
           <>
-            <ConfigurationPanel
-              handleApplyShader={() => setActiveCustomShader(shaderCode)}
-              handleReset={handleReset}
-              astrofoxRef={astrofoxRef}
-              ppState={ppState}
-              config={config}
-              setConfig={() => {}}
-              handleEffectConfig={() => {}}
-              ConfigFormComponent={ConfigFormComponent}
-              effects={effects}
-            />
-            <PresetsPanel
-              handleTypeChange={handleTypeChange}
-              handleResetAll={handleResetAll}
-              micData={micData}
-              tapTempo={tapTempo}
-            />
+            <Grid size={{ xs: 12, md: visualType === 'astrofox' ? 12 : 8 }}>
+              <ConfigurationPanel
+                handleApplyShader={() => setActiveCustomShader(shaderCode)}
+                handleReset={handleReset}
+                astrofoxRef={astrofoxRef}
+                ppState={ppState}
+                config={config}
+                setConfig={() => {}}
+                handleEffectConfig={() => {}}
+                ConfigFormComponent={ConfigFormComponent}
+                effects={effects}
+              />
+            </Grid>
+            {visualType !== 'astrofox' && (
+              <Grid size={{ xs: 12, md: 4 }}>
+                <PresetsPanel
+                  handleTypeChange={handleTypeChange}
+                  handleResetAll={handleResetAll}
+                  micData={micData}
+                  tapTempo={tapTempo}
+                />
+              </Grid>
+            )}
           </>
         )}
       </RootGrid>

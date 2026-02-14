@@ -22,9 +22,35 @@ import { BLEND_MODES } from '../../../engines/astrofox/types'
 export interface CommonControlsProps {
   layer: AstrofoxLayer
   onUpdate: (updates: Partial<AstrofoxLayer>) => void
+  allLayers?: AstrofoxLayer[]
 }
 
-export function CommonControls({ layer, onUpdate }: CommonControlsProps) {
+export function CommonControls({ layer, onUpdate, allLayers = [] }: CommonControlsProps) {
+  // Check if name is unique (excluding current layer)
+  const isNameTaken = (newName: string) => {
+    return allLayers.some(
+      (l) => l.id !== layer.id && l.name.toLowerCase() === newName.toLowerCase()
+    )
+  }
+
+  const handleNameChange = (newName: string) => {
+    if (newName.trim() === '') {
+      return // Don't allow empty names
+    }
+
+    // If name is taken, append a number
+    let finalName = newName
+    if (isNameTaken(newName)) {
+      let counter = 1
+      while (isNameTaken(`${newName} (${counter})`)) {
+        counter++
+      }
+      finalName = `${newName} (${counter})`
+    }
+
+    onUpdate({ name: finalName })
+  }
+
   return (
     <>
       <TextField
@@ -32,7 +58,13 @@ export function CommonControls({ layer, onUpdate }: CommonControlsProps) {
         size="small"
         label="Name"
         value={layer.name}
-        onChange={(e) => onUpdate({ name: e.target.value })}
+        onChange={(e) => handleNameChange(e.target.value)}
+        error={isNameTaken(layer.name)}
+        helperText={
+          isNameTaken(layer.name)
+            ? 'Name already exists - will auto-rename on blur'
+            : ''
+        }
         sx={{ mb: 2 }}
       />
 

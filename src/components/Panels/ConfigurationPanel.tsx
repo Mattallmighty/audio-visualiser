@@ -12,8 +12,9 @@ import {
   Slider,
   Grid
 } from '@mui/material'
-import { Code, AutoFixHigh } from '@mui/icons-material'
+import { Code, AutoFixHigh, Save, Delete } from '@mui/icons-material'
 import { type WebGLVisualisationType, type AstrofoxVisualiserRef, ASTROFOX_PRESETS, getAstrofoxPresetLayers } from '../Visualisers'
+import type { CustomAstrofoxPreset } from '../../store/visualizer/storeConfigs'
 import { PostProcessingPanel } from './PostProcessingPanel'
 import SimpleConfigForm from '../SimpleConfigForm'
 import { DEFAULT_CONFIGS } from '../../_generated/webgl/defaults'
@@ -22,6 +23,7 @@ import { VISUALISER_SCHEMAS } from '../../_generated/webgl/schemas'
 import { VISUALIZER_REGISTRY } from '../../_generated/registry'
 import { orderEffectProperties } from '../../utils/webgl'
 import { useStore } from '../../store'
+import AstrofoxLayerPanel from './AstrofoxLayerPanel'
 
 interface ConfigurationPanelProps {
   handleApplyShader: () => void
@@ -53,6 +55,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
   const astrofoxConfig = useStore(state => state.astrofoxConfig)
   const setAstrofoxConfig = useStore(state => state.setAstrofoxConfig)
   const astrofoxReady = useStore(state => state.astrofoxReady)
+  const customAstrofoxPresets = useStore(state => state.customAstrofoxPresets)
+  const saveCustomAstrofoxPreset = useStore(state => state.saveCustomAstrofoxPreset)
+  const deleteCustomAstrofoxPreset = useStore(state => state.deleteCustomAstrofoxPreset)
   const butterchurnConfig = useStore(state => state.butterchurnConfig)
   const setButterchurnConfig = useStore(state => state.setButterchurnConfig)
   const fluidConfig = useStore(state => state.visualizerConfigs.fluid)
@@ -69,9 +74,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
   }
 
   return (
-    <Grid size={{ xs: 12, md: 8 }}>
-      <Card variant="outlined" sx={{ height: '100%' }}>
-        <CardContent>
+    <Card variant="outlined" sx={{ height: '100%' }}>
+      <CardContent>
           <Box
             sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}
           >
@@ -196,25 +200,92 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
         ) : visualType === 'astrofox' ? (
           <Box>
             {/* Quick Presets */}
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Quick Presets
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="subtitle2">
+                Quick Presets
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<Save />}
+                onClick={() => {
+                  const name = window.prompt('Enter preset name:')
+                  if (name && name.trim()) {
+                    const currentLayers = astrofoxRef.current?.layers || []
+                    const presetData = {
+                      name: name.trim(),
+                      layers: currentLayers,
+                      backgroundColor: astrofoxConfig.backgroundColor
+                    }
+
+                    saveCustomAstrofoxPreset(
+                      presetData.name,
+                      presetData.layers,
+                      presetData.backgroundColor
+                    )
+                  }
+                }}
+                sx={{ textTransform: 'none' }}
+              >
+                Save
+              </Button>
+            </Box>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+              {/* Built-in presets */}
               {ASTROFOX_PRESETS.map((preset) => (
                 <Button
                   key={preset}
                   variant="outlined"
                   size="small"
-                  onClick={() =>
+                  onClick={() => {
+                    const presetLayers = getAstrofoxPresetLayers(preset)
                     setAstrofoxConfig((prev: any) => ({
                       ...prev,
-                      layers: getAstrofoxPresetLayers(preset)
+                      layers: presetLayers
                     }))
-                  }
+                  }}
                   sx={{ textTransform: 'capitalize' }}
                 >
                   {preset}
                 </Button>
+              ))}
+
+              {/* Custom presets */}
+              {customAstrofoxPresets.map((preset: CustomAstrofoxPreset) => (
+                <Box key={preset.name} sx={{ position: 'relative', display: 'inline-block' }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() =>
+                      setAstrofoxConfig((prev: any) => ({
+                        ...prev,
+                        layers: JSON.parse(JSON.stringify(preset.layers)),
+                        backgroundColor: preset.backgroundColor
+                      }))
+                    }
+                    sx={{ textTransform: 'none', pr: 4 }}
+                  >
+                    {preset.name}
+                  </Button>
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      if (window.confirm(`Delete preset "${preset.name}"?`)) {
+                        deleteCustomAstrofoxPreset(preset.name)
+                      }
+                    }}
+                    sx={{
+                      position: 'absolute',
+                      right: 2,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      padding: '2px',
+                      '&:hover': { color: 'error.main' }
+                    }}
+                  >
+                    <Delete fontSize="small" />
+                  </IconButton>
+                </Box>
               ))}
             </Box>
 
@@ -239,13 +310,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
 
             <Divider sx={{ my: 2 }} />
 
-            {/* Full Layer Controls from Astrofox component */}
-            {astrofoxReady && astrofoxRef.current?.renderControls()}
-            {!astrofoxReady && (
-              <Typography variant="caption" color="text.secondary">
-                Loading layer controls...
-              </Typography>
-            )}
+            {/* Astrofox Layer Panel */}
+            <AstrofoxLayerPanel astrofoxRef={astrofoxRef} />
           </Box>
         ) : visualType === 'fluid' ? (
           <Box>
@@ -456,7 +522,6 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
         )}
       </CardContent>
     </Card>
-    </Grid>
   )
 }
 

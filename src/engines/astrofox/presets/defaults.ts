@@ -58,7 +58,7 @@ export const DEFAULT_WAVE_SPECTRUM: Omit<WaveSpectrumLayer, 'id' | 'name'> = {
   lineWidth: 2,
   lineColor: '#22d3ee',
   fill: true,
-  fillColor: 'rgba(34, 211, 238, 0.3)',
+  fillColor: '#22d3ee',
   minFrequency: 20,
   maxFrequency: 6000,
   smoothing: 0.6
@@ -77,7 +77,7 @@ export const DEFAULT_SOUND_WAVE: Omit<SoundWaveLayer, 'id' | 'name'> = {
   height: 240,
   lineWidth: 2,
   color: '#00ffff',
-  fillColor: 'rgba(0, 255, 255, 0.1)',
+  fillColor: '#00ffff',
   useFill: false,
   wavelength: 0.1,
   smooth: 0.5
@@ -130,11 +130,14 @@ export const DEFAULT_IMAGE: Omit<ImageLayer, 'id' | 'name'> = {
   scale: 1,
   imageUrl: '',
   imageData: '',
-  width: 0,
-  height: 0,
+  width: 30, // percentage of canvas width
+  height: 30, // percentage of canvas height (will auto-adjust if maintainAspectRatio is true)
   naturalWidth: 0,
   naturalHeight: 0,
-  fixed: false
+  fixed: false,
+  maintainAspectRatio: true, // preserve aspect ratio by default
+  audioReactive: true,
+  reactiveScale: 0.15
 }
 
 export const DEFAULT_GEOMETRY_3D: Omit<Geometry3DLayer, 'id' | 'name'> = {
@@ -206,9 +209,8 @@ export const createDefaultLayer = (
       return {
         ...DEFAULT_IMAGE,
         id,
-        name: `Image ${index}`,
-        width: canvasWidth || 0,
-        height: canvasHeight || 0
+        name: `Image ${index}`
+        // width and height are already percentages in DEFAULT_IMAGE
       }
     case 'geometry3d':
       return { ...DEFAULT_GEOMETRY_3D, id, name: `Geometry (3D) ${index}` }
@@ -219,15 +221,21 @@ export const createDefaultLayer = (
 
 // --- Built-in Presets ---
 
-export const PRESET_LAYERS: Record<string, AstrofoxLayer[]> = {
+const PRESET_LAYERS: Record<string, AstrofoxLayer[]> = {
   default: [
     {
-      id: 'default_bars',
-      name: 'Spectrum Bars',
-      ...DEFAULT_BAR_SPECTRUM,
-      y: 300,
-      width: 1000,
-      height: 250
+      id: 'default_background',
+      name: 'Background',
+      ...DEFAULT_IMAGE,
+      imageUrl: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4',
+      width: 100,
+      height: 100,
+      naturalWidth: 4878,
+      naturalHeight: 3252,
+      fixed: false,
+      maintainAspectRatio: false, // Stretch to fill screen
+      audioReactive: false,
+      reactiveScale: 0.15
     },
     {
       id: 'default_wave',
@@ -236,16 +244,46 @@ export const PRESET_LAYERS: Record<string, AstrofoxLayer[]> = {
       y: 200,
       width: 1000,
       height: 200,
-      blendMode: 'screen',
-      opacity: 0.7
+      blendMode: 'normal',
+      opacity: 0.87,
+      maxFrequency: 20000
     },
     {
-      id: 'default_text',
-      name: 'Title',
-      ...DEFAULT_TEXT,
-      y: -250,
-      fontSize: 72,
-      text: 'LedFX'
+      id: 'default_soundwave2',
+      name: 'Sound Wave 2 1',
+      ...DEFAULT_SOUND_WAVE_2,
+      y: -41,
+      radius: 150,
+      lineWidth: 3,
+      lineColor: '#53f43e',
+      mode: 'circle',
+      sensitivity: 1.5,
+      blendMode: 'color-dodge'
+    },
+    {
+      id: 'default_bars',
+      name: 'Spectrum Bars',
+      ...DEFAULT_BAR_SPECTRUM,
+      y: 300,
+      width: 1000,
+      height: 250,
+      rotation: 360,
+      maxFrequency: 20000,
+      smoothing: 0.75
+    },
+    {
+      id: 'default_logo',
+      name: 'LedFX',
+      ...DEFAULT_IMAGE,
+      imageUrl: 'https://raw.githubusercontent.com/LedFx/LedFx/refs/heads/main/ledfx_assets/discord.png',
+      width: 20,
+      height: 43,
+      y: -40,
+      naturalWidth: 512,
+      naturalHeight: 512,
+      maintainAspectRatio: true,
+      audioReactive: true,
+      reactiveScale: 0.93
     }
   ],
   minimal: [
@@ -297,6 +335,118 @@ export const PRESET_LAYERS: Record<string, AstrofoxLayer[]> = {
       width: 800,
       height: 150
     }
+  ],
+  retrowave: [
+    {
+      id: 'retro_grid',
+      name: 'Grid Background',
+      ...DEFAULT_BAR_SPECTRUM,
+      y: 350,
+      width: 1200,
+      height: 300,
+      barWidth: 6,
+      barSpacing: 1,
+      barColor: '#ff006e',
+      barColorEnd: '#8338ec',
+      mirror: false,
+      blendMode: 'screen'
+    },
+    {
+      id: 'retro_wave',
+      name: 'Wave Line',
+      ...DEFAULT_WAVE_SPECTRUM,
+      y: 0,
+      width: 1200,
+      height: 250,
+      lineWidth: 3,
+      lineColor: '#fb5607',
+      fill: true,
+      fillColor: '#fb5607',
+      blendMode: 'screen'
+    },
+    {
+      id: 'retro_text',
+      name: 'Title',
+      ...DEFAULT_TEXT,
+      text: 'RETROWAVE',
+      y: -300,
+      fontSize: 80,
+      font: 'Racing Sans One',
+      color: '#ffbe0b',
+      audioReactive: true
+    }
+  ],
+  cosmic: [
+    {
+      id: 'cosmic_sphere',
+      name: 'Cosmic Sphere',
+      ...DEFAULT_GEOMETRY_3D,
+      shape: 'Sphere',
+      size: 180,
+      color: '#8b5cf6',
+      wireframe: true,
+      edges: false,
+      opacity: 0.7,
+      blendMode: 'screen',
+      audioReactive: true
+    },
+    {
+      id: 'cosmic_rings',
+      name: 'Energy Rings',
+      ...DEFAULT_SOUND_WAVE_2,
+      radius: 250,
+      lineWidth: 2,
+      lineColor: '#06b6d4',
+      sensitivity: 2,
+      blendMode: 'screen'
+    },
+    {
+      id: 'cosmic_spectrum',
+      name: 'Spectrum Base',
+      ...DEFAULT_BAR_SPECTRUM,
+      y: 380,
+      width: 1000,
+      height: 180,
+      barColor: '#3b82f6',
+      barColorEnd: '#ec4899',
+      mirror: true,
+      opacity: 0.8
+    }
+  ],
+  particles: [
+    {
+      id: 'particles_center',
+      name: 'Center Wave',
+      ...DEFAULT_SOUND_WAVE_2,
+      radius: 100,
+      lineWidth: 5,
+      lineColor: '#fbbf24',
+      sensitivity: 3,
+      blendMode: 'screen'
+    },
+    {
+      id: 'particles_outer',
+      name: 'Outer Ring',
+      ...DEFAULT_SOUND_WAVE_2,
+      radius: 250,
+      lineWidth: 2,
+      lineColor: '#10b981',
+      sensitivity: 1.5,
+      opacity: 0.6,
+      blendMode: 'screen'
+    },
+    {
+      id: 'particles_bars',
+      name: 'Beat Bars',
+      ...DEFAULT_BAR_SPECTRUM,
+      y: 350,
+      width: 900,
+      height: 200,
+      barWidth: 12,
+      barColor: '#ef4444',
+      barColorEnd: '#f59e0b',
+      mirror: false
+    }
   ]
 }
 
@@ -307,9 +457,20 @@ export const DEFAULT_ASTROFOX_CONFIG: AstrofoxConfig = {
   height: 1080
 }
 
-export const ASTROFOX_PRESETS = ['default', 'minimal', 'neon', '3d'] as const
+export const ASTROFOX_PRESETS = [
+  'default',
+  'minimal',
+  'neon',
+  '3d',
+  'retrowave',
+  'cosmic',
+  'particles'
+] as const
 export type AstrofoxPresetName = (typeof ASTROFOX_PRESETS)[number]
 
 export function getAstrofoxPresetLayers(preset: AstrofoxPresetName): AstrofoxLayer[] {
   return JSON.parse(JSON.stringify(PRESET_LAYERS[preset] || PRESET_LAYERS.default))
 }
+
+// Export PRESET_LAYERS for re-use
+export { PRESET_LAYERS }

@@ -27,7 +27,7 @@
     "generate": "pnpm generate:schemas && pnpm generate:backend && pnpm generate:webgl",
     "prebuild": "pnpm generate",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build",
-    "postbuild": "node -e \"const fs = require('fs'); const path = require('path'); fs.copyFileSync('dist/yz-audio-visualiser.js', '../frontend/public/modules/yz-audio-visualiser.js');fs.copyFileSync('dist/audio-visualiser.d.ts', '../frontend/src/types/yz-audio-visualiser.d.ts'); console.log('✅ Copied type definitions to frontend')\"",
+    "postbuild": "node scripts/postbuild.js",
     "dist": "pnpm build && node ./scripts/dist.js",
     "prebuild:pages": "pnpm generate",
     "build:pages": "vite build --mode pages",

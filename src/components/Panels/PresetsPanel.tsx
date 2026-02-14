@@ -21,9 +21,8 @@ const PresetsPanel: React.FC<PresetsPanelProps> = ({
   const audioSource = useStore(state => state.audioSource)
   
   return (
-    <Grid size={{ xs: 12, md: 4 }}>
-      <Card variant="outlined" sx={{ height: '100%' }}>
-        <CardContent>
+    <Card variant="outlined" sx={{ height: '100%' }}>
+      <CardContent>
           <Typography variant="h6" gutterBottom>
             Presets
           </Typography>
@@ -52,7 +51,6 @@ const PresetsPanel: React.FC<PresetsPanelProps> = ({
           </Button>
         </CardContent>
       </Card>
-    </Grid>
   )
 }
 
