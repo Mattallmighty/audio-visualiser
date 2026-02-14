@@ -58,7 +58,7 @@ export const DEFAULT_WAVE_SPECTRUM: Omit<WaveSpectrumLayer, 'id' | 'name'> = {
   lineWidth: 2,
   lineColor: '#22d3ee',
   fill: true,
-  fillColor: 'rgba(34, 211, 238, 0.3)',
+  fillColor: '#22d3ee',
   minFrequency: 20,
   maxFrequency: 6000,
   smoothing: 0.6
@@ -77,7 +77,7 @@ export const DEFAULT_SOUND_WAVE: Omit<SoundWaveLayer, 'id' | 'name'> = {
   height: 240,
   lineWidth: 2,
   color: '#00ffff',
-  fillColor: 'rgba(0, 255, 255, 0.1)',
+  fillColor: '#00ffff',
   useFill: false,
   wavelength: 0.1,
   smooth: 0.5
@@ -361,7 +361,7 @@ const PRESET_LAYERS: Record<string, AstrofoxLayer[]> = {
       lineWidth: 3,
       lineColor: '#fb5607',
       fill: true,
-      fillColor: 'rgba(251, 86, 7, 0.2)',
+      fillColor: '#fb5607',
       blendMode: 'screen'
     },
     {
