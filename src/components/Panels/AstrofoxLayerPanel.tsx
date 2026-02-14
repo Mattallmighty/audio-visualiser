@@ -69,7 +69,28 @@ export function AstrofoxLayerPanel({ astrofoxRef }: AstrofoxLayerPanelProps) {
 
   // Store layers in state to prevent infinite loops
   // Only update when the actual layers array reference changes
-  const [layers, setLayers] = useState<AstrofoxLayer[]>(() => astrofoxRef.current?.layers || [])
+  const [layers, setLayers] = useState<AstrofoxLayer[]>([])
+
+  // Sync layers from ref - check periodically but only update if reference changed
+  useEffect(() => {
+    const checkLayers = () => {
+      const currentLayers = astrofoxRef.current?.layers || []
+      // Only update if the reference actually changed (not deep equality)
+      setLayers((prev) => {
+        if (prev !== currentLayers) {
+          return currentLayers
+        }
+        return prev
+      })
+    }
+
+    // Check immediately on mount
+    checkLayers()
+
+    // Then check periodically (500ms to avoid performance issues)
+    const interval = setInterval(checkLayers, 500)
+    return () => clearInterval(interval)
+  }, [astrofoxRef])
 
   // Force re-render when layers change
   // Called explicitly after layer operations (add, remove, update, etc.)

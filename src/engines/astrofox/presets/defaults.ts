@@ -336,75 +336,6 @@ const PRESET_LAYERS: Record<string, AstrofoxLayer[]> = {
       height: 150
     }
   ],
-  vizzynation: [
-    {
-      id: 'vizzy_logo',
-      name: 'Vizzy Logo',
-      ...DEFAULT_IMAGE,
-      imageUrl: 'https://raw.githubusercontent.com/LedFx/LedFx/refs/heads/main/ledfx_assets/discord.png',
-      width: 30, // 30% of canvas width
-      height: 37, // 37% of canvas height (to maintain ~400x400 on 1920x1080)
-      x: 0,
-      y: -50,
-      opacity: 0.95,
-      blendMode: 'screen',
-      audioReactive: true,
-      reactiveScale: 0.2
-    },
-    {
-      id: 'vizzy_bars',
-      name: 'Rainbow Spectrum',
-      ...DEFAULT_BAR_SPECTRUM,
-      y: 280,
-      width: 1000,
-      height: 200,
-      barWidth: 10,
-      barSpacing: 3,
-      barColor: '#ff0088',
-      barColorEnd: '#00ffff',
-      mirror: true,
-      blendMode: 'screen',
-      opacity: 0.9
-    },
-    {
-      id: 'vizzy_glow',
-      name: 'Center Glow',
-      ...DEFAULT_SOUND_WAVE_2,
-      y: -50,
-      radius: 220,
-      lineWidth: 4,
-      lineColor: '#ffffff',
-      sensitivity: 2,
-      blendMode: 'screen',
-      opacity: 0.6
-    },
-    {
-      id: 'vizzy_text',
-      name: 'Vizzy Nation',
-      ...DEFAULT_TEXT,
-      text: 'Vizzy Nation',
-      y: -350,
-      x: 400,
-      fontSize: 48,
-      font: 'Permanent Marker',
-      color: '#ffffff',
-      audioReactive: false,
-      textAlign: 'right'
-    },
-    {
-      id: 'vizzy_author',
-      name: 'by German',
-      ...DEFAULT_TEXT,
-      text: 'by German',
-      y: -300,
-      x: 450,
-      fontSize: 32,
-      font: 'Raleway',
-      color: '#cccccc',
-      audioReactive: false,
-      textAlign: 'right'
-    }
-  ],
   retrowave: [
     {
       id: 'retro_grid',
@@ -531,7 +462,6 @@ export const ASTROFOX_PRESETS = [
   'minimal',
   'neon',
   '3d',
-  'vizzynation',
   'retrowave',
   'cosmic',
   'particles'
