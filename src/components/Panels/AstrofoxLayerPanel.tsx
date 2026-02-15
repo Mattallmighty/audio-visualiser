@@ -50,7 +50,10 @@ const LAYER_ICONS: Record<AstrofoxLayerType, React.ReactNode> = {
   text: <TextFields fontSize="small" />,
   image: <ImageIcon fontSize="small" />,
   geometry3d: <ViewInAr fontSize="small" />,
-  group: <Folder fontSize="small" />
+  group: <Folder fontSize="small" />,
+  neonTunnel: <ViewInAr fontSize="small" />,
+  reactiveOrb: <ViewInAr fontSize="small" />,
+  particleField: <ViewInAr fontSize="small" />
 }
 
 export interface AstrofoxLayerPanelProps {
@@ -565,6 +568,21 @@ export function AstrofoxLayerPanel({ astrofoxRef }: AstrofoxLayerPanelProps) {
               <Tooltip title="Group">
                 <IconButton size="small" onClick={() => addLayer('group')}>
                   <Folder fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Neon Tunnel (3D)">
+                <IconButton size="small" onClick={() => addLayer('neonTunnel')}>
+                  <ViewInAr fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Reactive Orb (3D)">
+                <IconButton size="small" onClick={() => addLayer('reactiveOrb')}>
+                  <ViewInAr fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Particle Field (3D)">
+                <IconButton size="small" onClick={() => addLayer('particleField')}>
+                  <ViewInAr fontSize="small" />
                 </IconButton>
               </Tooltip>
             </Box>

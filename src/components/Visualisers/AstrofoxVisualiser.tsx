@@ -66,6 +66,11 @@ import {
 // Audio processing utilities (based on Astrofox audio engine)
 import { FFTParser, WaveParser } from '../../engines/audio/FFTParser'
 
+// Three.js 3D renderers
+import { NeonTunnelRenderer, ReactiveOrbRenderer, ParticleFieldRenderer } from '../../engines/astrofox/renderers/three'
+import { AudioSmoother } from '../../engines/astrofox/utils/AudioSmoother'
+import type { FrequencyBands } from '../../engines/astrofox/utils/AudioSmoother'
+
 // --- Font List (from Astrofox fonts.json) ---
 const AVAILABLE_FONTS = [
   'Permanent Marker',
@@ -149,6 +154,9 @@ export type AstrofoxLayerType =
   | 'image'
   | 'geometry3d'
   | 'group'
+  | 'neonTunnel'
+  | 'reactiveOrb'
+  | 'particleField'
 
 export interface AstrofoxLayerBase {
   id: string
@@ -267,6 +275,56 @@ export interface GroupLayer extends AstrofoxLayerBase {
   childIds: string[]
 }
 
+// 3D Audio-Reactive Layers (Three.js)
+export type FrequencyBand = 'bass' | 'mid' | 'high'
+
+export interface NeonTunnelLayer extends AstrofoxLayerBase {
+  type: 'neonTunnel'
+  frequencyBands: FrequencyBand[]
+  audioSensitivity: number
+  color: string
+  wireframeThickness: number
+  glowIntensity: number
+  speed: number
+  segments: number
+  cameraShakeEnabled: boolean
+  cameraShakeIntensity: number
+  enableBloom: boolean
+  bloomStrength: number
+  enableRGBShift: boolean
+  rgbShiftAmount: number
+}
+
+export interface ReactiveOrbLayer extends AstrofoxLayerBase {
+  type: 'reactiveOrb'
+  frequencyBands: FrequencyBand[]
+  audioSensitivity: number
+  color: string
+  displacementAmount: number
+  noiseScale: number
+  subdivisions: number
+  fresnelIntensity: number
+  enableBloom: boolean
+  bloomStrength: number
+  enableRGBShift: boolean
+  rgbShiftAmount: number
+}
+
+export interface ParticleFieldLayer extends AstrofoxLayerBase {
+  type: 'particleField'
+  frequencyBands: FrequencyBand[]
+  audioSensitivity: number
+  particleCount: number
+  particleSize: number
+  particleColor: string
+  speed: number
+  depth: number
+  enableBloom: boolean
+  bloomStrength: number
+  enableRGBShift: boolean
+  rgbShiftAmount: number
+}
+
 export type AstrofoxLayer =
   | BarSpectrumLayer
   | WaveSpectrumLayer
@@ -276,6 +334,9 @@ export type AstrofoxLayer =
   | ImageLayer
   | Geometry3DLayer
   | GroupLayer
+  | NeonTunnelLayer
+  | ReactiveOrbLayer
+  | ParticleFieldLayer
 
 export interface AstrofoxConfig {
   layers: AstrofoxLayer[]
@@ -499,7 +560,10 @@ const LAYER_ICONS: Record<AstrofoxLayerType, React.ReactNode> = {
   text: <TextFields />,
   image: <ImageIcon />,
   geometry3d: <ViewInAr />,
-  group: <Folder />
+  group: <Folder />,
+  neonTunnel: <ViewInAr />,
+  reactiveOrb: <ViewInAr />,
+  particleField: <ViewInAr />
 }
 
 // --- Helper Functions ---
@@ -543,6 +607,80 @@ const createDefaultLayer = (
       return { ...DEFAULT_GEOMETRY_3D, id, name: `Geometry (3D) ${index}` }
     case 'group':
       return { ...DEFAULT_GROUP, id, name: `Group ${index}` }
+    case 'neonTunnel':
+      return {
+        id,
+        name: `Neon Tunnel ${index}`,
+        type: 'neonTunnel',
+        visible: true,
+        opacity: 1,
+        blendMode: 'screen',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        scale: 1,
+        frequencyBands: ['bass'],
+        audioSensitivity: 1.5,
+        color: '#00ffff',
+        wireframeThickness: 2,
+        glowIntensity: 1.2,
+        speed: 0.5,
+        segments: 32,
+        cameraShakeEnabled: true,
+        cameraShakeIntensity: 0.1,
+        enableBloom: true,
+        bloomStrength: 1.5,
+        enableRGBShift: false,
+        rgbShiftAmount: 0.003
+      }
+    case 'reactiveOrb':
+      return {
+        id,
+        name: `Reactive Orb ${index}`,
+        type: 'reactiveOrb',
+        visible: true,
+        opacity: 1,
+        blendMode: 'screen',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        scale: 1,
+        frequencyBands: ['mid'],
+        audioSensitivity: 1.0,
+        color: '#ff00ff',
+        displacementAmount: 0.3,
+        noiseScale: 1.5,
+        subdivisions: 4,
+        fresnelIntensity: 1.5,
+        enableBloom: true,
+        bloomStrength: 2.0,
+        enableRGBShift: false,
+        rgbShiftAmount: 0.003
+      }
+    case 'particleField':
+      return {
+        id,
+        name: `Particle Field ${index}`,
+        type: 'particleField',
+        visible: true,
+        opacity: 0.8,
+        blendMode: 'screen',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        scale: 1,
+        frequencyBands: ['high'],
+        audioSensitivity: 1.0,
+        particleCount: 3000,
+        particleSize: 2,
+        particleColor: '#ffffff',
+        speed: 1.0,
+        depth: 50,
+        enableBloom: true,
+        bloomStrength: 1.0,
+        enableRGBShift: false,
+        rgbShiftAmount: 0.003
+      }
   }
 }
 
@@ -570,6 +708,10 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
     // Cache for FFT parsers per-layer (key: layerId, value: parser instance)
     const fftParserCache = useRef<Map<string, FFTParser>>(new Map())
     const waveParserCache = useRef<Map<string, WaveParser>>(new Map())
+    // Cache for Three.js 3D renderers (key: layerId, value: renderer instance)
+    const three3DRendererCache = useRef<Map<string, any>>(new Map())
+    // Audio smoother for smoothing frequency bands
+    const audioSmootherRef = useRef<any>(null)
 
     const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null)
     const [layersExpanded, setLayersExpanded] = useState(true)
@@ -588,7 +730,10 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
       text: 1,
       image: 1,
       geometry3d: 1,
-      group: 1
+      group: 1,
+      neonTunnel: 1,
+      reactiveOrb: 1,
+      particleField: 1
     })
 
     // Get the currently selected layer
@@ -1734,6 +1879,178 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
       [getGeometryData, hexToRgb]
     )
 
+    // Initialize AudioSmoother
+    if (!audioSmootherRef.current) {
+      audioSmootherRef.current = new AudioSmoother(0.15)
+    }
+
+    // Get smoothed frequency bands
+    const smoothedBands: FrequencyBands = useMemo(() => {
+      if (!_frequencyBands) {
+        return { bass: 0, mid: 0, high: 0 }
+      }
+      return audioSmootherRef.current.update({
+        bass: _frequencyBands.bass || 0,
+        mid: _frequencyBands.mid || 0,
+        high: _frequencyBands.high || 0
+      })
+    }, [_frequencyBands])
+
+    // Get current time for animations
+    const timeRef = useRef<number>(0)
+    useEffect(() => {
+      const startTime = performance.now()
+      const updateTime = () => {
+        timeRef.current = (performance.now() - startTime) / 1000
+        if (isPlaying) {
+          requestAnimationFrame(updateTime)
+        }
+      }
+      if (isPlaying) {
+        updateTime()
+      }
+      return () => {
+        // Cleanup handled by animation loop
+      }
+    }, [isPlaying])
+
+    // Render Neon Tunnel
+    const renderNeonTunnel = useCallback((
+      ctx: CanvasRenderingContext2D,
+      layer: any,
+      centerX: number,
+      centerY: number
+    ) => {
+      const width = canvasSizeRef.current.width
+      const height = canvasSizeRef.current.height
+
+      // Get or create renderer
+      let renderer = three3DRendererCache.current.get(layer.id)
+      if (!renderer) {
+        renderer = new NeonTunnelRenderer({
+          width,
+          height,
+          color: layer.color,
+          wireframeThickness: layer.wireframeThickness,
+          glowIntensity: layer.glowIntensity,
+          speed: layer.speed,
+          segments: layer.segments,
+          frequencyBands: layer.frequencyBands,
+          audioSensitivity: layer.audioSensitivity,
+          cameraShakeEnabled: layer.cameraShakeEnabled,
+          cameraShakeIntensity: layer.cameraShakeIntensity,
+          enableBloom: layer.enableBloom,
+          bloomStrength: layer.bloomStrength,
+          enableRGBShift: layer.enableRGBShift,
+          rgbShiftAmount: layer.rgbShiftAmount
+        })
+        three3DRendererCache.current.set(layer.id, renderer)
+      }
+
+      // Render to off-screen canvas
+      const offscreenCanvas = renderer.render(smoothedBands, timeRef.current)
+
+      // Composite to main canvas
+      ctx.save()
+      ctx.translate(centerX + layer.x, centerY + layer.y)
+      ctx.rotate((layer.rotation * Math.PI) / 180)
+      ctx.scale(layer.scale, layer.scale)
+      ctx.globalAlpha = layer.opacity
+      ctx.globalCompositeOperation = getCompositeOperation(layer.blendMode)
+      ctx.drawImage(offscreenCanvas, -offscreenCanvas.width / 2, -offscreenCanvas.height / 2)
+      ctx.restore()
+    }, [smoothedBands])
+
+    // Render Reactive Orb
+    const renderReactiveOrb = useCallback((
+      ctx: CanvasRenderingContext2D,
+      layer: any,
+      centerX: number,
+      centerY: number
+    ) => {
+      const width = canvasSizeRef.current.width
+      const height = canvasSizeRef.current.height
+
+      // Get or create renderer
+      let renderer = three3DRendererCache.current.get(layer.id)
+      if (!renderer) {
+        renderer = new ReactiveOrbRenderer({
+          width,
+          height,
+          color: layer.color,
+          displacementAmount: layer.displacementAmount,
+          noiseScale: layer.noiseScale,
+          subdivisions: layer.subdivisions,
+          fresnelIntensity: layer.fresnelIntensity,
+          frequencyBands: layer.frequencyBands,
+          audioSensitivity: layer.audioSensitivity,
+          enableBloom: layer.enableBloom,
+          bloomStrength: layer.bloomStrength,
+          enableRGBShift: layer.enableRGBShift,
+          rgbShiftAmount: layer.rgbShiftAmount
+        })
+        three3DRendererCache.current.set(layer.id, renderer)
+      }
+
+      // Render to off-screen canvas
+      const offscreenCanvas = renderer.render(smoothedBands, timeRef.current)
+
+      // Composite to main canvas
+      ctx.save()
+      ctx.translate(centerX + layer.x, centerY + layer.y)
+      ctx.rotate((layer.rotation * Math.PI) / 180)
+      ctx.scale(layer.scale, layer.scale)
+      ctx.globalAlpha = layer.opacity
+      ctx.globalCompositeOperation = getCompositeOperation(layer.blendMode)
+      ctx.drawImage(offscreenCanvas, -offscreenCanvas.width / 2, -offscreenCanvas.height / 2)
+      ctx.restore()
+    }, [smoothedBands])
+
+    // Render Particle Field
+    const renderParticleField = useCallback((
+      ctx: CanvasRenderingContext2D,
+      layer: any,
+      centerX: number,
+      centerY: number
+    ) => {
+      const width = canvasSizeRef.current.width
+      const height = canvasSizeRef.current.height
+
+      // Get or create renderer
+      let renderer = three3DRendererCache.current.get(layer.id)
+      if (!renderer) {
+        renderer = new ParticleFieldRenderer({
+          width,
+          height,
+          particleCount: layer.particleCount,
+          particleSize: layer.particleSize,
+          particleColor: layer.particleColor,
+          speed: layer.speed,
+          depth: layer.depth,
+          frequencyBands: layer.frequencyBands,
+          audioSensitivity: layer.audioSensitivity,
+          enableBloom: layer.enableBloom,
+          bloomStrength: layer.bloomStrength,
+          enableRGBShift: layer.enableRGBShift,
+          rgbShiftAmount: layer.rgbShiftAmount
+        })
+        three3DRendererCache.current.set(layer.id, renderer)
+      }
+
+      // Render to off-screen canvas
+      const offscreenCanvas = renderer.render(smoothedBands, timeRef.current)
+
+      // Composite to main canvas
+      ctx.save()
+      ctx.translate(centerX + layer.x, centerY + layer.y)
+      ctx.rotate((layer.rotation * Math.PI) / 180)
+      ctx.scale(layer.scale, layer.scale)
+      ctx.globalAlpha = layer.opacity
+      ctx.globalCompositeOperation = getCompositeOperation(layer.blendMode)
+      ctx.drawImage(offscreenCanvas, -offscreenCanvas.width / 2, -offscreenCanvas.height / 2)
+      ctx.restore()
+    }, [smoothedBands])
+
     // Main render function
     const render = useCallback(() => {
       const canvas = canvasRef.current
@@ -1780,6 +2097,15 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
           case 'geometry3d':
             renderGeometry3D(ctx, layer as Geometry3DLayer, audioData, centerX, centerY)
             break
+          case 'neonTunnel':
+            renderNeonTunnel(ctx, layer, centerX, centerY)
+            break
+          case 'reactiveOrb':
+            renderReactiveOrb(ctx, layer, centerX, centerY)
+            break
+          case 'particleField':
+            renderParticleField(ctx, layer, centerX, centerY)
+            break
           case 'group':
             // Groups render their children - handled separately
             break
@@ -1795,7 +2121,10 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
       renderSoundWave2,
       renderText,
       renderImage,
-      renderGeometry3D
+      renderGeometry3D,
+      renderNeonTunnel,
+      renderReactiveOrb,
+      renderParticleField
     ])
 
     // Store render function in ref for animation loop
@@ -1849,6 +2178,16 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
         }
       }
     }, [isPlaying])
+
+    // Cleanup Three.js renderers on unmount
+    useEffect(() => {
+      return () => {
+        three3DRendererCache.current.forEach((renderer) => {
+          renderer.dispose()
+        })
+        three3DRendererCache.current.clear()
+      }
+    }, [])
 
     // --- Render Controls Panel ---
     // eslint-disable-next-line react-hooks/exhaustive-deps

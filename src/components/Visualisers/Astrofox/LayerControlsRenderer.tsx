@@ -16,6 +16,9 @@ import { TextControls } from './TextControls'
 import { ImageControls } from './ImageControls'
 import { Geometry3DControls } from './Geometry3DControls'
 import { GroupControls } from './GroupControls'
+import { NeonTunnelControls } from './NeonTunnelControls'
+import { ReactiveOrbControls } from './ReactiveOrbControls'
+import { ParticleFieldControls } from './ParticleFieldControls'
 
 export interface LayerControlsRendererProps {
   layer: AstrofoxLayer
@@ -55,6 +58,12 @@ export function LayerControlsRenderer({ layer, onUpdate, allLayers = [] }: Layer
         return <Geometry3DControls layer={layer} onUpdate={onUpdate} />
       case 'group':
         return <GroupControls layer={layer} onUpdate={onUpdate} />
+      case 'neonTunnel':
+        return <NeonTunnelControls layer={layer} onUpdate={onUpdate} />
+      case 'reactiveOrb':
+        return <ReactiveOrbControls layer={layer} onUpdate={onUpdate} />
+      case 'particleField':
+        return <ParticleFieldControls layer={layer} onUpdate={onUpdate} />
       default:
         return null
     }

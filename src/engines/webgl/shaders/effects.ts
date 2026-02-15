@@ -1832,7 +1832,8 @@ export const soapShader = `
     vec2 uv = v_position;
     uv.x *= u_resolution.x / u_resolution.y;
 
-    float time = u_time * 0.3;
+    // Use modulo to keep time values reasonable (prevents float precision issues)
+    float time = mod(u_time * 0.3, 628.0); // 628 ~= 100 * 2PI
 
     // Create soap bubble interference pattern
     float thickness = 0.0;
@@ -1848,8 +1849,8 @@ export const soapShader = `
 
     // Iridescent color (thin film interference)
     float hue = fract(thickness * 2.0 + time * 0.1);
-    float sat = 0.6 + thickness * 0.3;
-    float val = 0.7 + thickness * 0.3;
+    float sat = clamp(0.6 + thickness * 0.3, 0.0, 1.0);
+    float val = clamp(0.7 + thickness * 0.3, 0.0, 1.0);
 
     vec3 color = hsv2rgb(vec3(hue, sat, val));
 
@@ -1858,11 +1859,13 @@ export const soapShader = `
     float spec = exp(-length(uv - lightPos) * 3.0);
     color += vec3(1.0) * spec * 0.3;
 
-    // Audio shimmer
-    color *= 0.8 + (u_bass + u_mid + u_high) * 0.2;
+    // Audio shimmer - clamp audio values to prevent overflow
+    float audioSum = clamp(u_bass + u_mid + u_high, 0.0, 3.0);
+    color *= 0.8 + audioSum * 0.2;
 
-    // Beat flash
-    color *= 1.0 + u_beat * 0.2;
+    // Beat flash - clamp beat value
+    float beatClamped = clamp(u_beat, 0.0, 1.0);
+    color *= 1.0 + beatClamped * 0.2;
 
     // Clamp final color to prevent brightness blowout
     color = clamp(color, 0.0, 1.0);
