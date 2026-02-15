@@ -85,6 +85,24 @@ function generateUISchema(schema: VisualizerSchema): string {
   // Filter out hidden properties
   const visibleProps = Object.entries(schema.properties)
     .filter(([_, prop]) => !prop.ui?.hidden)
+
+  // Sort properties according to requirement
+  visibleProps.sort((a, b) => {
+    const getOrder = (p: SchemaProperty) => {
+      if ((p as any).format === 'color' || (p as any).isGradient) return 1
+      if (p.type === 'number' || p.type === 'integer') return 2
+      if ((p as any).enum) return 3
+      if (p.type === 'string') return 4
+      if (p.type === 'boolean') return 5
+      return 6
+    }
+    const orderA = getOrder(a[1])
+    const orderB = getOrder(b[1])
+    if (orderA === orderB) {
+      return (a[1].title || a[0]).localeCompare(b[1].title || b[0])
+    }
+    return orderA - orderB
+  })
   
   // Generate properties object
   const properties = visibleProps.map(([key, prop]) => {
@@ -93,6 +111,7 @@ function generateUISchema(schema: VisualizerSchema): string {
     
     const propObj: any = {
       type: isButterchurnPreset ? 'autocomplete' :
+            (prop as any).enum ? 'string' : // Force string for enums to trigger BladeSelect
             prop.type === 'integer' ? 'integer' : 
             (prop as any).format === 'color' ? 'color' : 
             prop.type,
@@ -103,12 +122,15 @@ function generateUISchema(schema: VisualizerSchema): string {
     if (prop.description) propObj.description = prop.description
     if ('minimum' in prop && prop.minimum !== undefined) propObj.minimum = prop.minimum
     if ('maximum' in prop && prop.maximum !== undefined) propObj.maximum = prop.maximum
+    if ('step' in prop && (prop as any).step !== undefined) propObj.step = (prop as any).step
     if ('isGradient' in prop && prop.isGradient) propObj.isGradient = true
     
-    // Add enum and freeSolo for butterchurn preset
+    // Add enum and freeSolo
     if (isButterchurnPreset) {
       propObj.enum = []
       propObj.freeSolo = true
+    } else if ((prop as any).enum) {
+      propObj.enum = (prop as any).enum
     }
     
     return `    ${key}: ${JSON.stringify(propObj, null, 6).replace(/\n/g, '\n    ')}`
@@ -282,6 +304,23 @@ async function generate() {
   
   console.log(`\nSuccessfully loaded ${schemas.length} schema(s)\n`)
   
+  // Also load backend-generated schemas if they exist
+  const backendSchemasPath = path.join(OUTPUT_DIR, 'webgl/schemas.ts')
+  if (fs.existsSync(backendSchemasPath)) {
+    console.log('📦 Loading backend-discovered schemas...')
+    try {
+      const backendModule = await import('file://' + backendSchemasPath.replace(/\\/g, '/'))
+      const backendSchemas = backendModule.VISUALISER_SCHEMAS
+      if (backendSchemas) {
+        const backendSchemaList = Object.values(backendSchemas) as VisualizerSchema[]
+        schemas.push(...backendSchemaList)
+        console.log(`    ✓ Loaded ${backendSchemaList.length} backend schema(s)`)
+      }
+    } catch (err: any) {
+      console.error(`    ✗ Failed to load backend schemas:`, err.message || err)
+    }
+  }
+
   // Generate outputs
   let typesOutput = `/**
  * AUTO-GENERATED - DO NOT EDIT

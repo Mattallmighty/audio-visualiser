@@ -46,6 +46,7 @@ const FRONTEND_ONLY_SHADERS = [
   'matrix',
   'terrain',
   'geometric',
+  'image',
 ]
 
 interface SchemaField {
@@ -67,6 +68,7 @@ interface EffectSchema {
   hiddenKeys: string[]
   advancedKeys: string[]
   defaults: Record<string, any>
+  displayName?: string
 }
 
 interface GitHubFile {
@@ -139,25 +141,6 @@ async function fetchGitHubDirectory(etag: string | null = null): Promise<{ files
 }
 
 /**
- * Fetch directory listing from GitHub API
- */
-async function fetchGitHubDirectoryLegacy(): Promise<GitHubFile[]> {
-  console.log('📂 Fetching effects directory from GitHub API...')
-  const response = await fetch(GITHUB_API_BASE)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch directory: ${response.statusText}`)
-  }
-  
-  const files = await response.json() as any[]
-  return files.filter((file: any) => 
-    file.type === 'file' && 
-    file.name.endsWith('.py') &&
-    file.name !== '__init__.py' &&
-    !file.name.startsWith('template')  // Skip template files
-  )
-}
-
-/**
  * Fetch Python file content from GitHub
  */
 async function fetchGitHubFile(url: string): Promise<string> {
@@ -169,21 +152,48 @@ async function fetchGitHubFile(url: string): Promise<string> {
 }
 
 /**
- * Check if Python file defines a Twod-based effect
- * Looks for class definitions that inherit from Twod
+ * Check if Python file defines a Twod-based or 2D/Matrix effect
  */
-function isTwodEffect(content: string): boolean {
-  // Matches: class XYZ(Twod) or class XYZ(Twod, ...) or class XYZ(..., Twod, ...)
+function isWebGLEffect(content: string): boolean {
+  // Matches: class XYZ(Twod) or CATEGORY = "2D" or CATEGORY = "Matrix"
   const classRegex = /class\s+\w+\([^)]*\bTwod\b[^)]*\):/
-  return classRegex.test(content)
+  const categoryRegex = /CATEGORY\s*=\s*["'](2D|Matrix)["']/i
+  return classRegex.test(content) || categoryRegex.test(content)
 }
 
 /**
- * Extract effect name from Python filename
- * Strips .py extension and preserves original naming (with underscores)
+ * Mapping of backend filenames to frontend visualizer IDs
+ */
+const BACKEND_TO_FRONTEND_MAP: Record<string, string> = {
+  'digitalrain2d': 'digitalrain',
+  'flame2d': 'flame',
+  'game_of_life': 'gameoflife',
+  'gifplayer': 'gif',
+  'imagespin': 'gif',
+  'plasmawled': 'plasmawled2d',
+  'soap2d': 'soap',
+  'texter2d': 'texter',
+  'waterfall2d': 'waterfall',
+  'bands_matrix': 'bandsmatrix',
+  'equalizer2d': 'equalizer2d',
+  'noise2d': 'noise2d',
+  'plasma2d': 'plasma2d',
+  'radial': 'radial',
+  'bleep': 'bleep',
+  'clone': 'clone',
+  'concentric': 'concentric',
+  'bands': 'bands',
+  'blender': 'blender',
+  'blocks': 'blocks',
+  'keybeat2d': 'keybeat2d'
+}
+
+/**
+ * Extract effect name from Python filename and map to frontend ID
  */
 function filenameToEffectName(filename: string): string {
-  return filename.replace('.py', '')
+  const baseName = filename.replace('.py', '')
+  return BACKEND_TO_FRONTEND_MAP[baseName] || baseName.replace(/2d$/, '')
 }
 
 /**
@@ -195,50 +205,100 @@ function parsePythonEffect(content: string, effectName: string): EffectSchema {
   let hiddenKeys: string[] = []
   let advancedKeys: string[] = []
 
-  // Extract HIDDEN_KEYS
-  const hiddenKeysMatch = content.match(/HIDDEN_KEYS\s*=\s*.*?\[([^\]]+)\]/s)
-  if (hiddenKeysMatch) {
-    hiddenKeys = hiddenKeysMatch[1]
+  // Helper to extract keys from assignments like HIDDEN_KEYS = ... + ["a", "b"]
+  const extractKeys = (pattern: RegExp): string[] => {
+    const match = content.match(pattern)
+    if (!match) return []
+    const bracketsContent = match[1]
+    return bracketsContent
       .split(',')
       .map(k => k.trim().replace(/['"]/g, ''))
       .filter(k => k && k !== '...')
   }
 
-  // Extract ADVANCED_KEYS
-  const advancedKeysMatch = content.match(/ADVANCED_KEYS\s*=\s*.*?\[([^\]]+)\]/s)
-  if (advancedKeysMatch) {
-    advancedKeys = advancedKeysMatch[1]
-      .split(',')
-      .map(k => k.trim().replace(/['"]/g, ''))
-      .filter(k => k && k !== '...')
+  hiddenKeys = extractKeys(/HIDDEN_KEYS\s*=\s*[^[\]]*\[([\s\S]*?)\]/)
+  advancedKeys = extractKeys(/ADVANCED_KEYS\s*=\s*[^[\]]*\[([\s\S]*?)\]/)
+
+  // Add base class keys if referenced
+  if (content.includes('Twod.HIDDEN_KEYS')) {
+    hiddenKeys.push('mirror', 'flip', 'blur', 'dump')
+  }
+  if (content.includes('AudioReactiveEffect.ADVANCED_KEYS')) {
+    advancedKeys.push('frequency_range')
+  }
+  if (content.includes('Twod.ADVANCED_KEYS')) {
+    advancedKeys.push('dump', 'test', 'flip_horizontal', 'flip_vertical', 'background_mode')
   }
 
   // Extract CONFIG_SCHEMA fields
-  // Match vol.Optional blocks
-  const optionalRegex = /vol\.Optional\s*\(\s*["']([^"']+)["']\s*,\s*description\s*=\s*["']([^"']*)["']\s*(?:,\s*default\s*=\s*([^)]+))?\s*\)\s*:\s*([^,]+)/gs
+  // Support both vol.Optional and vol.Required
+  const fieldRegex = /vol\.(Optional|Required)\s*\(\s*["']([^"']+)["']\s*(?:,\s*description\s*=\s*["']([^"']*)["'])?\s*(?:,\s*default\s*=\s*([\s\S]*?))?\s*\)\s*:\s*([\s\S]*?)(?=,\s*vol\.(?:Optional|Required)|(?:\s*\n\s*\})|$)/gs
 
   let match
-  while ((match = optionalRegex.exec(content)) !== null) {
-    const [, id, description, defaultValue, validator] = match
+  while ((match = fieldRegex.exec(content)) !== null) {
+    // eslint-disable-next-line prefer-const
+    let [ , , id, description, defaultValue, validator ] = match
     
+    // Clean up trailing commas from defaultValue and validator
+    if (defaultValue) defaultValue = defaultValue.trim().replace(/,$/, '').trim()
+    if (validator) validator = validator.trim().replace(/,$/, '').trim()
+
     // Parse validator to determine type and constraints
-    const field = parseValidator(id, description, defaultValue, validator.trim())
+    const field = parseValidator(id, description || '', defaultValue, validator)
     if (field) {
       fields.push(field)
       defaults[id] = field.default
     }
   }
 
-  // Add developer_mode if not present (common to all effects)
-  if (!fields.find(f => f.id === 'developer_mode')) {
-    fields.push({
-      id: 'developer_mode',
-      title: 'Developer Mode',
-      type: 'boolean',
-      default: false
-    })
-    defaults.developer_mode = false
+  // Inject inherited fields from base classes if they are not redefined
+  const inheritedFields: SchemaField[] = []
+
+  if (content.includes('GradientEffect') || effectName === 'radial') {
+    inheritedFields.push(
+      {
+        id: 'gradient',
+        title: 'Gradient',
+        type: 'color',
+        gradient: true,
+        default: 'linear-gradient(90deg, rgb(255, 0, 0) 0%, rgb(255, 120, 0) 14%, rgb(255, 200, 0) 28%, rgb(0, 255, 0) 42%, rgb(0, 199, 140) 56%, rgb(0, 0, 255) 70%, rgb(128, 0, 128) 84%, rgb(255, 0, 178) 98%)',
+        description: 'Color gradient to display'
+      },
+      {
+        id: 'gradient_roll',
+        title: 'Gradient Roll',
+        type: 'number',
+        default: 0,
+        min: 0,
+        max: 10,
+        step: 0.1,
+        description: 'Amount to shift the gradient'
+      }
+    )
   }
+
+  if (content.includes('Twod')) {
+    inheritedFields.push(
+      { id: 'flip_horizontal', title: 'Flip Horizontal', type: 'boolean', default: false, description: 'Flip image horizontally' },
+      { id: 'flip_vertical', title: 'Flip Vertical', type: 'boolean', default: false, description: 'Flip image vertically' },
+      { id: 'rotate', title: 'Rotate', type: 'integer', default: 0, min: 0, max: 360, step: 1, description: 'Rotation in degrees' },
+      { id: 'background_mode', title: 'Background Mode', type: 'string', default: 'additive', description: 'Background blending mode' }
+    )
+  }
+
+  // Common Effect fields often desired in UI
+  inheritedFields.push(
+    { id: 'brightness', title: 'Brightness', type: 'number', default: 1.0, min: 0, max: 1.0, step: 0.01 },
+    { id: 'blur', title: 'Blur', type: 'number', default: 0.0, min: 0, max: 10, step: 0.1 }
+  )
+
+  for (const f of inheritedFields) {
+    if (!fields.find(existing => existing.id === f.id)) {
+      fields.push(f)
+      defaults[f.id] = f.default
+    }
+  }
+
 
   return {
     name: effectName,
@@ -299,12 +359,23 @@ function parseValidator(id: string, description: string, defaultValue: string | 
   } else if (validator.includes('vol.In')) {
     // Enum type
     field.type = 'string'
-    // Could extract enum values but complex - leave as string for now
+    // Try to extract enum values
+    const inMatch = validator.match(/vol\.In\s*\(\s*\[([\s\S]*?)\]\s*\)/)
+    if (inMatch) {
+      field.enum = inMatch[1].split(',').map(v => v.trim().replace(/['"]/g, ''))
+    } else if (validator.includes('TEXT_EFFECT_MAPPING')) {
+      field.enum = ["Side Scroll", "Spokes", "Carousel", "Wave", "Pulse", "Fade"]
+    } else if (validator.includes('FONT_MAPPINGS')) {
+      field.enum = ["Press Start 2P", "Blade-5x8", "8bitOperatorPlus8-Regular", "Roboto-Black", "Roboto-Bold", "Roboto-Regular", "Stop", "technique"]
+    } else if (validator.includes('ResizeMethods')) {
+      field.enum = ["Fastest", "Fast", "Slow"]
+    }
   } else if (validator.includes('vol.Coerce(float)') || validator.includes('vol.Coerce(int)')) {
     // Number type with range
     field.type = validator.includes('vol.Coerce(int)') ? 'integer' : 'number'
     
-    const rangeMatch = validator.match(/vol\.Range\s*\(\s*min\s*=\s*([^,\s)]+)(?:\s*,\s*max\s*=\s*([^,\s)]+))?\s*\)/)
+    // Improved regex to handle vol.Range(min=0, max=1) as well as vol.Range(0, 1)
+    const rangeMatch = validator.match(/vol\.Range\s*\(\s*(?:min\s*=\s*)?([^,\s)]+)(?:\s*,\s*(?:max\s*=\s*)?([^,\s)]+))?\s*\)/)
     if (rangeMatch) {
       field.min = Number(rangeMatch[1])
       if (rangeMatch[2]) {
@@ -315,7 +386,9 @@ function parseValidator(id: string, description: string, defaultValue: string | 
       if (field.type === 'integer') {
         field.step = 1
       } else {
-        const range = (field.max ?? 10) - (field.min ?? 0)
+        const min = field.min ?? 0
+        const max = field.max ?? 1
+        const range = max - min
         field.step = range > 10 ? 1 : range > 1 ? 0.1 : 0.01
       }
     }
@@ -340,46 +413,215 @@ function generateSchemasFile(schemas: Record<string, EffectSchema>): string {
  * ⚠️ AUTO-GENERATED - DO NOT EDIT MANUALLY
  * Generated from: https://github.com/LedFx/LedFx/tree/main/ledfx/effects
  * 
- * Effect names match backend Python filenames for consistency.
- * All Twod-based 2D matrix effects are auto-discovered.
- * 
  * Run \`pnpm generate:backend\` to regenerate.
  */
 
-export const VISUALISER_SCHEMAS: Record<string, any[]> = {\n`
+import { VisualizerSchema } from '../../../schemas/base.schema'
+
+export const VISUALISER_SCHEMAS: Record<string, VisualizerSchema> = {\n`
 
   for (const [key, schema] of Object.entries(schemas)) {
-    output += `  "${key}": [\n`
+    let displayName = key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+    if (key === 'bladeTexter') displayName = 'Blade Texter'
+
+    // UI Tweaks for specific effects
+    if (key === 'texter' || key === 'bladeTexter') {
+      if (key === 'bladeTexter') schema.displayName = 'Blade Texter'
+      schema.hiddenKeys.push('alpha', 'text_color', 'use_gradient', 'option_1', 'option_2', 'value_option_1', 'resize_method', 'deep_diag', 'background_mode', 'blur', 'height_percent')
+      
+      if (key === 'bladeTexter') {
+        schema.hiddenKeys.push('use_gradient2', 'brightness')
+        schema.advancedKeys.push('impulse_decay', 'multiplier', 'gradient_roll')
+      } else {
+        schema.advancedKeys.push('impulse_decay', 'multiplier', 'speed_option_1', 'gradient_roll')
+      }
+
+      // Add zoom, squeeze_x, squeeze_y, offset_x, offset_y fields for new shader controls (no height_percent)
+      schema.fields = schema.fields.filter(f => f.id !== 'height_percent')
+      
+      if (key === 'bladeTexter') {
+        const speed1Field = schema.fields.find(f => f.id === 'speed_option_1')
+        if (speed1Field) {
+          speed1Field.title = 'Speed'
+          speed1Field.default = 0.1
+        }
+      }
+
+      const extraFields: SchemaField[] = [
+        {
+          id: 'zoom',
+          title: 'Zoom',
+          type: 'number',
+          default: 1.0,
+          min: 0.1,
+          max: 5.0,
+          step: 0.01
+        },
+        {
+          id: 'stretch_x',
+          title: 'Stretch X',
+          type: 'number',
+          default: 1.0,
+          min: 0.1,
+          max: 5.0,
+          step: 0.01
+        },
+        {
+          id: 'stretch_y',
+          title: 'Stretch Y',
+          type: 'number',
+          default: 1.0,
+          min: 0.1,
+          max: 5.0,
+          step: 0.01
+        },
+        {
+          id: 'offset_x',
+          title: 'Offset X',
+          type: 'number',
+          default: 0.0,
+          min: -2.0,
+          max: 2.0,
+          step: 0.01
+        },
+        {
+          id: 'offset_y',
+          title: 'Offset Y',
+          type: 'number',
+          default: key === 'bladeTexter' ? 0.4 : 0.0,
+          min: -2.0,
+          max: 2.0,
+          step: 0.01
+        }
+      ]
+
+      if (key === 'bladeTexter') {
+        extraFields.push(
+          { id: 'text2', title: 'Text 2', type: 'string', default: 'hacked the visualyzer' },
+          { id: 'font2', title: 'Font 2', type: 'string', default: 'Press Start 2P', enum: ["Press Start 2P", "Blade-5x8", "8bitOperatorPlus8-Regular", "Roboto-Black", "Roboto-Bold", "Roboto-Regular", "Stop", "technique"] },
+          { id: 'text_effect2', title: 'Text Effect 2', type: 'string', default: 'Side Scroll', enum: ["Side Scroll", "Spokes", "Carousel", "Wave", "Pulse", "Fade"] },
+          { id: 'speed2', title: 'Speed 2', type: 'number', default: 0.1, min: 0.0, max: 10.0, step: 0.01 },
+          { 
+            id: 'gradient2', 
+            title: 'Gradient 2', 
+            type: 'color', 
+            gradient: true, 
+            default: 'linear-gradient(90deg, rgb(255, 0, 0) 0%, rgb(255, 128, 0) 100%)' 
+          },
+          { id: 'use_gradient2', title: 'Use Gradient 2', type: 'boolean', default: true },
+          { id: 'gradient_roll2', title: 'Gradient Roll 2', type: 'number', default: 0, min: 0, max: 10, step: 0.1 },
+          { id: 'zoom2', title: 'Zoom 2', type: 'number', default: 1.0, min: 0.1, max: 5.0, step: 0.01 },
+          { id: 'stretch_x2', title: 'Stretch X 2', type: 'number', default: 1.0, min: 0.1, max: 5.0, step: 0.01 },
+          { id: 'stretch_y2', title: 'Stretch Y 2', type: 'number', default: 1.0, min: 0.1, max: 5.0, step: 0.01 },
+          { id: 'offset_x2', title: 'Offset X 2', type: 'number', default: 0.0, min: -2.0, max: 2.0, step: 0.01 },
+          { id: 'offset_y2', title: 'Offset Y 2', type: 'number', default: -0.4, min: -2.0, max: 2.0, step: 0.01 },
+          { id: 'flip_horizontal2', title: 'Flip Horizontal 2', type: 'boolean', default: false },
+          { id: 'flip_vertical2', title: 'Flip Vertical 2', type: 'boolean', default: false },
+          { id: 'rotate2', title: 'Rotate 2', type: 'integer', default: 0, min: 0, max: 360, step: 1 }
+        )
+      } else {
+        // Texter cleanup: remove any fields that might have leaked from Blade Texter additions
+        schema.hiddenKeys.push('text2', 'font2', 'text_effect2', 'speed2', 'gradient2', 'use_gradient2', 'gradient_roll2', 'zoom2', 'stretch_x2', 'stretch_y2', 'offset_x2', 'offset_y2', 'flip_horizontal2', 'flip_vertical2', 'rotate2')
+      }
+
+      schema.fields.push(...extraFields)
+      
+      schema.defaults.font_size = 240
+      schema.defaults.zoom = 1.0
+      schema.defaults.stretch_x = 1.0
+      schema.defaults.stretch_y = 1.0
+      schema.defaults.offset_x = 0.0
+      schema.defaults.offset_y = key === 'bladeTexter' ? 0.4 : 0.0
+
+      if (key === 'bladeTexter') {
+        const setPropDefault = (id: string, val: any) => {
+          const field = schema.fields.find(f => f.id === id)
+          if (field) field.default = val
+          schema.defaults[id] = val
+        }
+
+        setPropDefault('text', 'Blade')
+        setPropDefault('text_effect', 'Fade')
+        setPropDefault('gradient', 'linear-gradient(90deg, rgb(0, 0, 255) 0%, rgb(0, 255, 255) 100%)')
+        setPropDefault('speed_option_1', 0.1)
+        setPropDefault('offset_y', 0.4)
+
+        setPropDefault('text2', 'hacked the visualyzer')
+        setPropDefault('text_effect2', 'Side Scroll')
+        setPropDefault('speed2', 0.1)
+        setPropDefault('gradient2', 'linear-gradient(90deg, rgb(255, 0, 0) 0%, rgb(255, 128, 0) 100%)')
+        setPropDefault('use_gradient2', true)
+        setPropDefault('font2', 'Press Start 2P')
+        setPropDefault('zoom2', 1.0)
+        setPropDefault('stretch_x2', 1.0)
+        setPropDefault('stretch_y2', 1.0)
+        setPropDefault('offset_x2', 0.0)
+        setPropDefault('offset_y2', -0.4)
+        setPropDefault('flip_horizontal2', false)
+        setPropDefault('flip_vertical2', false)
+        setPropDefault('rotate2', 0)
+      }
+    }
+
+    output += `  "${key}": {\n`
+    output += `    $id: '${key}',\n`
+    output += `    displayName: '${displayName}',\n`
+    output += `    type: 'object',\n`
+    output += `    properties: {\n`
     
+    // Sort fields by group and then by displayname || id
+    const getOrder = (f: SchemaField) => {
+      if (f.type === 'color' || f.gradient) return 1
+      if (f.type === 'number' || f.type === 'integer') return 2
+      if (f.enum) return 3
+      if (f.type === 'string') return 4
+      if (f.type === 'boolean') return 5
+      return 6
+    }
+
+    schema.fields.sort((a, b) => {
+      const orderA = getOrder(a)
+      const orderB = getOrder(b)
+      if (orderA === orderB) {
+        return (a.title || a.id).localeCompare(b.title || b.id)
+      }
+      return orderA - orderB
+    })
+
     for (const field of schema.fields) {
-      output += `    {\n`
-      output += `      id: '${field.id}',\n`
-      output += `      title: '${field.title}',\n`
-      output += `      type: '${field.type}'`
+      const isHidden = schema.hiddenKeys.includes(field.id)
       
+      output += `      "${field.id}": {\n`
+      output += `        type: '${field.type === 'color' ? 'string' : field.type}',\n`
+      output += `        title: '${field.title}',\n`
       if (field.description) {
-        output += `,\n      description: '${field.description}'`
+        output += `        description: '${field.description.replace(/'/g, "\\'")}',\n`
       }
-      if (field.min !== undefined) {
-        output += `,\n      min: ${field.min}`
+      if (field.default !== undefined) {
+        output += `        default: ${JSON.stringify(field.default)},\n`
       }
-      if (field.max !== undefined) {
-        output += `,\n      max: ${field.max}`
-      }
-      if (field.step !== undefined) {
-        output += `,\n      step: ${field.step}`
-      }
-      if (field.enum) {
-        output += `,\n      enum: ${JSON.stringify(field.enum)}`
-      }
-      if (field.gradient !== undefined) {
-        output += `,\n      gradient: ${field.gradient}`
+      if (field.min !== undefined) output += `        minimum: ${field.min},\n`
+      if (field.max !== undefined) output += `        maximum: ${field.max},\n`
+      if (field.step !== undefined) output += `        step: ${field.step},\n`
+      if (field.enum !== undefined) output += `        enum: ${JSON.stringify(field.enum)},\n`
+
+      if (field.type === 'color') {
+        output += `        format: 'color',\n`
+        if (field.gradient) output += `        isGradient: true,\n`
       }
       
-      output += `\n    },\n`
+      output += `        ui: {\n`
+      if (isHidden) output += `          hidden: true,\n`
+      output += `        }\n`
+      output += `      },\n`
     }
     
-    output += `  ],\n`
+    output += `    },\n`
+    output += `    required: ${JSON.stringify(schema.fields.map(f => f.id))},\n`
+    output += `    metadata: {\n`
+    output += `      category: 'Matrix Effects'\n`
+    output += `    }\n`
+    output += `  },\n`
   }
 
   output += `}\n`
@@ -396,9 +638,6 @@ function generateDefaultsFile(schemas: Record<string, EffectSchema>): string {
  * ⚠️ AUTO-GENERATED - DO NOT EDIT MANUALLY
  * Generated from: https://github.com/LedFx/LedFx/tree/main/ledfx/effects
  * 
- * Effect names match backend Python filenames for consistency.
- * All Twod-based 2D matrix effects are auto-discovered.
- * 
  * Run \`pnpm generate:backend\` to regenerate.
  */
 
@@ -414,14 +653,14 @@ export const DEFAULT_CONFIGS: Record<string, any> = {\n`
 
 /**
  * Generate backend mapping file
- * Now 1:1 mapping since frontend names match backend filenames
  */
-function generateBackendMappingFile(schemas: Record<string, EffectSchema>): string {
+function generateBackendMappingFile(schemas: Record<string, EffectSchema>, originalNames: Record<string, string>): string {
   const backendMapping: Record<string, string> = {}
   
-  for (const effectName of Object.keys(schemas)) {
-    // Effect name IS the backend name (no transformation needed)
-    backendMapping[effectName] = effectName
+  for (const [frontendId, backendFilename] of Object.entries(originalNames)) {
+    if (schemas[frontendId]) {
+      backendMapping[frontendId] = backendFilename
+    }
   }
 
   const output = `/**
@@ -429,9 +668,6 @@ function generateBackendMappingFile(schemas: Record<string, EffectSchema>): stri
  * 
  * ⚠️ AUTO-GENERATED - DO NOT EDIT MANUALLY
  * Generated from: https://github.com/LedFx/LedFx/tree/main/ledfx/effects
- * 
- * This is now a 1:1 mapping since frontend effect names match backend filenames.
- * Effect names are preserved exactly as they appear in the backend (e.g., game_of_life, flame2d).
  * 
  * Run \`pnpm generate:backend\` to regenerate.
  */
@@ -446,11 +682,18 @@ export const VISUAL_TO_BACKEND_EFFECT: Record<string, string> = ${JSON.stringify
  * Main execution - Auto-discover and generate
  */
 async function main() {
-  console.log('🔄 Auto-discovering Twod effects from LedFx backend...\n')
+  console.log('🔄 Auto-discovering 2D/Matrix effects from LedFx backend...\n')
 
   fs.ensureDirSync(OUTPUT_DIR)
   
+  // Invalidate cache to ensure all schemas are regenerated with new logic
+  if (fs.existsSync(CACHE_FILE)) {
+    console.log('🧹 Invalidating cache to apply new generation logic...\n')
+    fs.removeSync(CACHE_FILE)
+  }
+
   const schemas: Record<string, EffectSchema> = {}
+  const originalNames: Record<string, string> = {}
   let processed = 0
   let cached = 0
   let skipped = 0
@@ -467,6 +710,9 @@ async function main() {
       console.log('📦 Using cached schemas (no changes detected)\n')
       for (const [effectName, entry] of Object.entries(cache.files)) {
         schemas[effectName] = entry.schema
+        // Try to reconstruct original backend name for mapping
+        const originalName = Object.keys(BACKEND_TO_FRONTEND_MAP).find(k => BACKEND_TO_FRONTEND_MAP[k] === effectName) || effectName
+        originalNames[effectName] = originalName
         cached++
       }
     } else {
@@ -474,6 +720,7 @@ async function main() {
       const newCache: CacheData = { etag: etag || cache.etag, files: {} }
       
       for (const file of files) {
+        const backendFilename = file.name.replace('.py', '')
         const effectName = filenameToEffectName(file.name)
         
         try {
@@ -482,6 +729,7 @@ async function main() {
           if (cachedEntry && cachedEntry.sha === (file as any).sha) {
             console.log(`📦 ${effectName} (cached)`)
             schemas[effectName] = cachedEntry.schema
+            originalNames[effectName] = backendFilename
             newCache.files[effectName] = cachedEntry
             cached++
             continue
@@ -491,9 +739,9 @@ async function main() {
           console.log(`Fetching: ${file.download_url}`)
           const content = await fetchGitHubFile(file.download_url)
           
-          // Check if this is a Twod-based effect
-          if (!isTwodEffect(content)) {
-            console.log(`⏭️  Skipping ${file.name} (not a Twod effect)`)
+          // Check if this is a WebGL-relevant effect
+          if (!isWebGLEffect(content)) {
+            console.log(`⏭️  Skipping ${file.name} (not a 2D/Matrix effect)`)
             skipped++
             continue
           }
@@ -501,6 +749,7 @@ async function main() {
           // Parse the effect schema
           const schema = parsePythonEffect(content, effectName)
           schemas[effectName] = schema
+          originalNames[effectName] = backendFilename
           
           // Cache it
           newCache.files[effectName] = {
@@ -523,6 +772,13 @@ async function main() {
       await saveCache(newCache)
     }
 
+    // Duplicate texter to bladeTexter if it exists
+    if (schemas['texter']) {
+      console.log('✨ Duplicating texter to bladeTexter...')
+      schemas['bladeTexter'] = JSON.parse(JSON.stringify(schemas['texter']))
+      originalNames['bladeTexter'] = originalNames['texter'] || 'texter2d'
+    }
+
     // Report statistics
     console.log(`\n📊 Discovery Summary:`)
     console.log(`   ✅ Generated: ${processed} new`)
@@ -535,7 +791,7 @@ async function main() {
     
     const schemasContent = generateSchemasFile(schemas)
     const defaultsContent = generateDefaultsFile(schemas)
-    const mappingContent = generateBackendMappingFile(schemas)
+    const mappingContent = generateBackendMappingFile(schemas, originalNames)
 
     await fs.writeFile(path.join(OUTPUT_DIR, 'schemas.ts'), schemasContent)
     await fs.writeFile(path.join(OUTPUT_DIR, 'defaults.ts'), defaultsContent)
@@ -548,7 +804,7 @@ async function main() {
     if (cached > 0) {
       console.log(`   ⚡ Cached ${cached} effects (no GitHub requests!)`)
     }
-    console.log('   New Twod effects in backend will be automatically discovered!')
+    console.log('   New 2D/Matrix effects in backend will be automatically discovered!')
     
   } catch (error) {
     console.error('\n❌ Fatal error during auto-discovery:', error)
