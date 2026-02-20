@@ -18,7 +18,7 @@ export {
 } from './base'
 
 // Effect shaders
-export * from './effects'
+export * from './effects/index'
 
 // Advanced shaders
 export * from './advanced'
