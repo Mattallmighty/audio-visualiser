@@ -48,6 +48,9 @@ export type GeometryMaterial = (typeof GEOMETRY_MATERIALS)[number]
 export const SHADING_TYPES = ['Smooth', 'Flat'] as const
 export type ShadingType = (typeof SHADING_TYPES)[number]
 
+// --- Frequency Bands ---
+export type FrequencyBand = 'bass' | 'mid' | 'high'
+
 // --- Layer Types ---
 export type AstrofoxLayerType =
   | 'barSpectrum'
@@ -58,6 +61,9 @@ export type AstrofoxLayerType =
   | 'image'
   | 'geometry3d'
   | 'group'
+  | 'neonTunnel'
+  | 'reactiveOrb'
+  | 'particleField'
 
 // --- Base Layer ---
 export interface AstrofoxLayerBase {
@@ -174,6 +180,54 @@ export interface GroupLayer extends AstrofoxLayerBase {
   childIds: string[]
 }
 
+// --- 3D Audio-Reactive Layers (Three.js) ---
+export interface NeonTunnelLayer extends AstrofoxLayerBase {
+  type: 'neonTunnel'
+  frequencyBands: FrequencyBand[]
+  audioSensitivity: number
+  color: string
+  wireframeThickness: number
+  glowIntensity: number
+  speed: number
+  segments: number
+  cameraShakeEnabled: boolean
+  cameraShakeIntensity: number
+  enableBloom: boolean
+  bloomStrength: number
+  enableRGBShift: boolean
+  rgbShiftAmount: number
+}
+
+export interface ReactiveOrbLayer extends AstrofoxLayerBase {
+  type: 'reactiveOrb'
+  frequencyBands: FrequencyBand[]
+  audioSensitivity: number
+  color: string
+  displacementAmount: number
+  noiseScale: number
+  subdivisions: number
+  fresnelIntensity: number
+  enableBloom: boolean
+  bloomStrength: number
+  enableRGBShift: boolean
+  rgbShiftAmount: number
+}
+
+export interface ParticleFieldLayer extends AstrofoxLayerBase {
+  type: 'particleField'
+  frequencyBands: FrequencyBand[]
+  audioSensitivity: number
+  particleCount: number
+  particleSize: number
+  particleColor: string
+  speed: number
+  depth: number
+  enableBloom: boolean
+  bloomStrength: number
+  enableRGBShift: boolean
+  rgbShiftAmount: number
+}
+
 // --- Union Type ---
 export type AstrofoxLayer =
   | BarSpectrumLayer
@@ -184,6 +238,9 @@ export type AstrofoxLayer =
   | ImageLayer
   | Geometry3DLayer
   | GroupLayer
+  | NeonTunnelLayer
+  | ReactiveOrbLayer
+  | ParticleFieldLayer
 
 // --- Configuration ---
 export interface AstrofoxConfig {

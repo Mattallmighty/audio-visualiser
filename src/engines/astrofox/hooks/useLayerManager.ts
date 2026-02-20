@@ -72,7 +72,10 @@ export function useLayerManager({
     text: 1,
     image: 1,
     geometry3d: 1,
-    group: 1
+    group: 1,
+    neonTunnel: 1,
+    reactiveOrb: 1,
+    particleField: 1
   })
 
   // Selected layer object

@@ -15,3 +15,6 @@ export { renderSoundWave2, type SoundWave2RenderOptions } from './soundWave2'
 export { renderText, type TextRenderOptions } from './text'
 export { renderImage, type ImageRenderOptions } from './image'
 export { renderGeometry3D, getGeometryData, type Geometry3DRenderOptions } from './geometry3d'
+
+// Three.js 3D renderers
+export * from './three'

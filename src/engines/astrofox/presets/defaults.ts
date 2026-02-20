@@ -15,6 +15,9 @@ import type {
   ImageLayer,
   Geometry3DLayer,
   GroupLayer,
+  NeonTunnelLayer,
+  ReactiveOrbLayer,
+  ParticleFieldLayer,
   AstrofoxConfig
 } from '../types'
 
@@ -176,6 +179,76 @@ export const DEFAULT_GROUP: Omit<GroupLayer, 'id' | 'name'> = {
   childIds: []
 }
 
+// --- 3D Audio-Reactive Layers (Three.js) ---
+
+export const DEFAULT_NEON_TUNNEL: Omit<NeonTunnelLayer, 'id' | 'name'> = {
+  type: 'neonTunnel',
+  visible: true,
+  opacity: 1,
+  blendMode: 'screen',
+  x: 0,
+  y: 0,
+  rotation: 0,
+  scale: 1,
+  frequencyBands: ['bass'],
+  audioSensitivity: 1.5,
+  color: '#00ffff',
+  wireframeThickness: 2,
+  glowIntensity: 1.2,
+  speed: 0.5,
+  segments: 32,
+  cameraShakeEnabled: true,
+  cameraShakeIntensity: 0.1,
+  enableBloom: true,
+  bloomStrength: 1.5,
+  enableRGBShift: false,
+  rgbShiftAmount: 0.003
+}
+
+export const DEFAULT_REACTIVE_ORB: Omit<ReactiveOrbLayer, 'id' | 'name'> = {
+  type: 'reactiveOrb',
+  visible: true,
+  opacity: 1,
+  blendMode: 'screen',
+  x: 0,
+  y: 0,
+  rotation: 0,
+  scale: 1,
+  frequencyBands: ['mid'],
+  audioSensitivity: 1.0,
+  color: '#ff00ff',
+  displacementAmount: 0.3,
+  noiseScale: 1.5,
+  subdivisions: 4,
+  fresnelIntensity: 1.5,
+  enableBloom: true,
+  bloomStrength: 2.0,
+  enableRGBShift: false,
+  rgbShiftAmount: 0.003
+}
+
+export const DEFAULT_PARTICLE_FIELD: Omit<ParticleFieldLayer, 'id' | 'name'> = {
+  type: 'particleField',
+  visible: true,
+  opacity: 0.8,
+  blendMode: 'screen',
+  x: 0,
+  y: 0,
+  rotation: 0,
+  scale: 1,
+  frequencyBands: ['high'],
+  audioSensitivity: 1.0,
+  particleCount: 3000,
+  particleSize: 2,
+  particleColor: '#ffffff',
+  speed: 1.0,
+  depth: 50,
+  enableBloom: true,
+  bloomStrength: 1.0,
+  enableRGBShift: false,
+  rgbShiftAmount: 0.003
+}
+
 // --- Helper Functions ---
 
 export const generateId = (): string => Math.random().toString(36).substring(2, 11)
@@ -216,6 +289,12 @@ export const createDefaultLayer = (
       return { ...DEFAULT_GEOMETRY_3D, id, name: `Geometry (3D) ${index}` }
     case 'group':
       return { ...DEFAULT_GROUP, id, name: `Group ${index}` }
+    case 'neonTunnel':
+      return { ...DEFAULT_NEON_TUNNEL, id, name: `Neon Tunnel ${index}` }
+    case 'reactiveOrb':
+      return { ...DEFAULT_REACTIVE_ORB, id, name: `Reactive Orb ${index}` }
+    case 'particleField':
+      return { ...DEFAULT_PARTICLE_FIELD, id, name: `Particle Field ${index}` }
   }
 }
 
