@@ -269,7 +269,7 @@ export interface AstrofoxVisualiserRef {
 
 // --- Props Interface ---
 export interface AstrofoxVisualiserProps {
-  audioData: number[]
+  audioData: number[] | Float32Array
   isPlaying: boolean
   config: AstrofoxConfig
   onConfigChange?: (config: Partial<AstrofoxConfig>) => void

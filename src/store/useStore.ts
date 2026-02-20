@@ -33,8 +33,17 @@ const useStore = create(
         })
       ),
       {
-        name: 'visualiser-storage-v5',
-        version: VISUALISER_STORE_VERSION
+        name: 'visualiser-storage-v6',
+        version: VISUALISER_STORE_VERSION,
+        partialize: (state: any) => {
+          // Exclude non-serializable or static metadata from persistence
+          const { 
+            glContext, 
+            visualizers, 
+            ...rest 
+          } = state
+          return rest
+        }
       }
     ),
     {

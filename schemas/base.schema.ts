@@ -25,6 +25,7 @@ export interface BaseProperty {
   title: string
   description?: string
   default: any
+  step?: number
   ui?: UIOptions
 }
 
@@ -43,6 +44,7 @@ export interface NumberProperty extends BaseProperty {
   minimum?: number
   maximum?: number
   multipleOf?: number
+  step?: number
 }
 
 export interface BooleanProperty extends BaseProperty {
@@ -115,6 +117,7 @@ export const numberProp = (
     description?: string
     minimum?: number
     maximum?: number
+    step?: number
     ui?: UIOptions
   }
 ): NumberProperty => ({
@@ -124,6 +127,7 @@ export const numberProp = (
   description: opts?.description,
   minimum: opts?.minimum,
   maximum: opts?.maximum,
+  step: opts?.step,
   ui: opts?.ui
 })
 
@@ -137,6 +141,7 @@ export const integerProp = (
     description?: string
     minimum?: number
     maximum?: number
+    step?: number
     ui?: UIOptions
   }
 ): NumberProperty => ({
@@ -146,6 +151,7 @@ export const integerProp = (
   description: opts?.description,
   minimum: opts?.minimum,
   maximum: opts?.maximum,
+  step: opts?.step,
   ui: opts?.ui
 })
 
