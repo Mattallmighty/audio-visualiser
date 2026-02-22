@@ -64,6 +64,7 @@ export type AstrofoxLayerType =
   | 'neonTunnel'
   | 'reactiveOrb'
   | 'particleField'
+  | 'starField'
 
 // --- Base Layer ---
 export interface AstrofoxLayerBase {
@@ -129,6 +130,20 @@ export interface SoundWave2Layer extends AstrofoxLayerBase {
   lineColor: string
   mode: 'circle' | 'line'
   sensitivity: number
+  mirror?: boolean
+  barMode?: boolean
+  strokeBase?: boolean
+  inward?: boolean
+}
+
+export interface StarFieldLayer extends AstrofoxLayerBase {
+  type: 'starField'
+  starCount: number
+  starColor: string
+  maxSize: number
+  audioReactive: boolean
+  pulseIntensity: number
+  twinkle: boolean
 }
 
 export interface TextLayer extends AstrofoxLayerBase {
@@ -226,6 +241,9 @@ export interface ParticleFieldLayer extends AstrofoxLayerBase {
   bloomStrength: number
   enableRGBShift: boolean
   rgbShiftAmount: number
+  direction: 'centreOut' | 'rotateBeat' | 'leftToRight'
+  opacityReactive?: boolean   // pulse opacity with audio volume
+  opacitySensitivity?: number // 0–2: how much audio boosts opacity above base
 }
 
 // --- Union Type ---
@@ -241,6 +259,7 @@ export type AstrofoxLayer =
   | NeonTunnelLayer
   | ReactiveOrbLayer
   | ParticleFieldLayer
+  | StarFieldLayer
 
 // --- Configuration ---
 export interface AstrofoxConfig {

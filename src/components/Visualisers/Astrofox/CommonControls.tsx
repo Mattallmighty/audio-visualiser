@@ -23,9 +23,10 @@ export interface CommonControlsProps {
   layer: AstrofoxLayer
   onUpdate: (updates: Partial<AstrofoxLayer>) => void
   allLayers?: AstrofoxLayer[]
+  hideOpacity?: boolean
 }
 
-export function CommonControls({ layer, onUpdate, allLayers = [] }: CommonControlsProps) {
+export function CommonControls({ layer, onUpdate, allLayers = [], hideOpacity = false }: CommonControlsProps) {
   // Check if name is unique (excluding current layer)
   const isNameTaken = (newName: string) => {
     return allLayers.some(
@@ -68,17 +69,21 @@ export function CommonControls({ layer, onUpdate, allLayers = [] }: CommonContro
         sx={{ mb: 2 }}
       />
 
-      <Typography variant="caption" color="text.secondary">
-        Opacity: {layer.opacity.toFixed(2)}
-      </Typography>
-      <Slider
-        value={layer.opacity}
-        onChange={(_, v) => onUpdate({ opacity: v as number })}
-        min={0}
-        max={1}
-        step={0.01}
-        size="small"
-      />
+      {!hideOpacity && (
+        <>
+          <Typography variant="caption" color="text.secondary">
+            Opacity: {layer.opacity.toFixed(2)}
+          </Typography>
+          <Slider
+            value={layer.opacity}
+            onChange={(_, v) => onUpdate({ opacity: v as number })}
+            min={0}
+            max={1}
+            step={0.01}
+            size="small"
+          />
+        </>
+      )}
 
       <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
         <Box sx={{ flex: 1 }}>

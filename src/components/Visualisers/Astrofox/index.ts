@@ -9,3 +9,4 @@ export { BarSpectrumControls, type BarSpectrumControlsProps } from './BarSpectru
 export { TextControls, type TextControlsProps, AVAILABLE_FONTS } from './TextControls'
 export { Geometry3DControls, type Geometry3DControlsProps } from './Geometry3DControls'
 export { SoundWaveControls, type SoundWaveControlsProps } from './SoundWaveControls'
+export { StarFieldControls, type StarFieldControlsProps } from './StarFieldControls'

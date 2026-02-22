@@ -13,7 +13,9 @@ import {
   OutlinedInput,
   Checkbox,
   ListItemText,
-  SelectChangeEvent
+  FormControlLabel,
+  Switch,
+  type SelectChangeEvent
 } from '@mui/material'
 import type { ParticleFieldLayer, FrequencyBand } from '../../../engines/astrofox/types'
 
@@ -25,10 +27,13 @@ export interface ParticleFieldControlsProps {
 }
 
 export function ParticleFieldControls({ layer, onUpdate }: ParticleFieldControlsProps) {
+  const opacityReactive = layer.opacityReactive ?? false
+  const opacitySensitivity = layer.opacitySensitivity ?? 0.5
+
   return (
     <>
       <Typography variant="subtitle2" gutterBottom>
-        PARTICLE FIELD (3D)
+        PARTICLE FIELD
       </Typography>
 
       <TextField
@@ -40,6 +45,38 @@ export function ParticleFieldControls({ layer, onUpdate }: ParticleFieldControls
         onChange={(e) => onUpdate({ particleColor: e.target.value })}
         sx={{ mb: 2 }}
       />
+            {/* Opacity reactivity */}
+      <FormControlLabel
+        control={
+          <Switch
+            size="small"
+            checked={opacityReactive}
+            onChange={(e) => onUpdate({
+              opacityReactive: e.target.checked,
+              ...(e.target.checked ? { opacity: 1 } : {})
+            })}
+          />
+        }
+        label={<Typography variant="caption">Opacity reacts to volume</Typography>}
+        sx={{ mb: opacityReactive ? 1 : 2 }}
+      />
+
+      {opacityReactive && (
+        <>
+          <Typography variant="caption" color="text.secondary">
+            Opacity Sensitivity: {opacitySensitivity.toFixed(2)}
+          </Typography>
+          <Slider
+            value={opacitySensitivity}
+            onChange={(_, v) => onUpdate({ opacitySensitivity: v as number })}
+            min={0}
+            max={2}
+            step={0.05}
+            size="small"
+            sx={{ mb: 2 }}
+          />
+        </>
+      )}
 
       <FormControl fullWidth size="small" sx={{ mb: 2 }}>
         <InputLabel>Frequency Bands</InputLabel>
@@ -82,9 +119,9 @@ export function ParticleFieldControls({ layer, onUpdate }: ParticleFieldControls
       <Slider
         value={layer.particleCount}
         onChange={(_, v) => onUpdate({ particleCount: v as number })}
-        min={500}
+        min={100}
         max={10000}
-        step={500}
+        step={100}
         size="small"
         sx={{ mb: 2 }}
       />
@@ -96,7 +133,7 @@ export function ParticleFieldControls({ layer, onUpdate }: ParticleFieldControls
         value={layer.particleSize}
         onChange={(_, v) => onUpdate({ particleSize: v as number })}
         min={0.5}
-        max={5}
+        max={10}
         step={0.5}
         size="small"
         sx={{ mb: 2 }}
@@ -109,7 +146,7 @@ export function ParticleFieldControls({ layer, onUpdate }: ParticleFieldControls
         value={layer.speed}
         onChange={(_, v) => onUpdate({ speed: v as number })}
         min={0.1}
-        max={3}
+        max={5}
         step={0.1}
         size="small"
         sx={{ mb: 2 }}
@@ -127,6 +164,21 @@ export function ParticleFieldControls({ layer, onUpdate }: ParticleFieldControls
         size="small"
         sx={{ mb: 2 }}
       />
+
+      <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+        <InputLabel>Direction</InputLabel>
+        <Select
+          value={layer.direction ?? 'centreOut'}
+          label="Direction"
+          onChange={(e: SelectChangeEvent) =>
+            onUpdate({ direction: e.target.value as ParticleFieldLayer['direction'] })
+          }
+        >
+          <MenuItem value="centreOut">From Centre Out</MenuItem>
+          <MenuItem value="rotateBeat">Rotate to Beat</MenuItem>
+          <MenuItem value="leftToRight">Left to Right</MenuItem>
+        </Select>
+      </FormControl>
     </>
   )
 }

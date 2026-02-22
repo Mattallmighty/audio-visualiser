@@ -75,7 +75,8 @@ export function useLayerManager({
     group: 1,
     neonTunnel: 1,
     reactiveOrb: 1,
-    particleField: 1
+    particleField: 1,
+    starField: 1
   })
 
   // Selected layer object

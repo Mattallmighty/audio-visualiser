@@ -18,6 +18,7 @@ import type {
   NeonTunnelLayer,
   ReactiveOrbLayer,
   ParticleFieldLayer,
+  StarFieldLayer,
   AstrofoxConfig
 } from '../types'
 
@@ -99,7 +100,28 @@ export const DEFAULT_SOUND_WAVE_2: Omit<SoundWave2Layer, 'id' | 'name'> = {
   lineWidth: 3,
   lineColor: '#f43f5e',
   mode: 'circle',
-  sensitivity: 1.5
+  sensitivity: 1.5,
+  mirror: true,
+  barMode: true,
+  strokeBase: true,
+  inward: false
+}
+
+export const DEFAULT_STAR_FIELD: Omit<StarFieldLayer, 'id' | 'name'> = {
+  type: 'starField',
+  visible: true,
+  opacity: 1,
+  blendMode: 'screen',
+  x: 0,
+  y: 0,
+  rotation: 0,
+  scale: 1,
+  starCount: 150,
+  starColor: '#ffffff',
+  maxSize: 2.5,
+  audioReactive: true,
+  pulseIntensity: 0.6,
+  twinkle: true
 }
 
 export const DEFAULT_TEXT: Omit<TextLayer, 'id' | 'name'> = {
@@ -230,23 +252,26 @@ export const DEFAULT_REACTIVE_ORB: Omit<ReactiveOrbLayer, 'id' | 'name'> = {
 export const DEFAULT_PARTICLE_FIELD: Omit<ParticleFieldLayer, 'id' | 'name'> = {
   type: 'particleField',
   visible: true,
-  opacity: 0.8,
-  blendMode: 'screen',
+  opacity: 1,
+  blendMode: 'normal',
   x: 0,
   y: 0,
   rotation: 0,
   scale: 1,
-  frequencyBands: ['high'],
-  audioSensitivity: 1.0,
-  particleCount: 3000,
-  particleSize: 2,
+  frequencyBands: ['bass'],
+  audioSensitivity: 2.5,
+  particleCount: 500,
+  particleSize: 3.5,
   particleColor: '#ffffff',
   speed: 1.0,
-  depth: 50,
-  enableBloom: true,
+  depth: 55,
+  enableBloom: false,
   bloomStrength: 1.0,
   enableRGBShift: false,
-  rgbShiftAmount: 0.003
+  rgbShiftAmount: 0.003,
+  direction: 'centreOut',
+  opacityReactive: true,
+  opacitySensitivity: 0.30
 }
 
 // --- Helper Functions ---
@@ -295,6 +320,8 @@ export const createDefaultLayer = (
       return { ...DEFAULT_REACTIVE_ORB, id, name: `Reactive Orb ${index}` }
     case 'particleField':
       return { ...DEFAULT_PARTICLE_FIELD, id, name: `Particle Field ${index}` }
+    case 'starField':
+      return { ...DEFAULT_STAR_FIELD, id, name: `Star Field ${index}` }
   }
 }
 

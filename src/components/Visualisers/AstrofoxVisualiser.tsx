@@ -29,14 +29,15 @@ import {
   Image as ImageIcon,
   ViewInAr,
   Folder,
-  Layers
+  Layers,
+  AutoAwesome
 } from '@mui/icons-material'
 
 // Audio processing utilities (based on Astrofox audio engine)
 import { FFTParser } from '../../engines/audio/FFTParser'
 
 // Three.js 3D renderers
-import { NeonTunnelRenderer, ReactiveOrbRenderer, ParticleFieldRenderer } from '../../engines/astrofox/renderers/three'
+import { NeonTunnelRenderer, ReactiveOrbRenderer } from '../../engines/astrofox/renderers/three'
 import { AudioSmoother } from '../../engines/astrofox/utils/AudioSmoother'
 import type { FrequencyBands } from '../../engines/astrofox/utils/AudioSmoother'
 
@@ -59,6 +60,7 @@ import type {
   NeonTunnelLayer,
   ReactiveOrbLayer,
   ParticleFieldLayer,
+  StarFieldLayer,
   AstrofoxLayer,
   AstrofoxConfig,
   AstrofoxVisualiserRef,
@@ -71,9 +73,12 @@ import {
   renderWaveSpectrum,
   renderSoundWave,
   renderSoundWave2,
+  renderStarField,
+  renderParticleField2D,
   renderText,
   renderImage,
-  type ParseAudioDataFn
+  type ParseAudioDataFn,
+  type ParticleFieldState
 } from './Astrofox/renderers/canvasRenderers'
 import {
   renderGeometry3D as renderGeometry3DFn
@@ -94,6 +99,7 @@ export type {
   NeonTunnelLayer,
   ReactiveOrbLayer,
   ParticleFieldLayer,
+  StarFieldLayer,
   AstrofoxLayer,
   AstrofoxConfig,
   AstrofoxVisualiserRef,
@@ -158,7 +164,8 @@ export const LAYER_ICONS: Record<AstrofoxLayerType, React.ReactNode> = {
   group: <Folder />,
   neonTunnel: <ViewInAr />,
   reactiveOrb: <ViewInAr />,
-  particleField: <ViewInAr />
+  particleField: <ViewInAr />,
+  starField: <AutoAwesome />
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -191,6 +198,8 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
     const fftParserCache = useRef<Map<string, FFTParser>>(new Map())
     // Cache for Three.js 3D renderers (key: layerId, value: renderer instance)
     const three3DRendererCache = useRef<Map<string, any>>(new Map())
+    // 2D particle field state cache (replaces Three.js particle renderer)
+    const particleStateCache = useRef<Map<string, ParticleFieldState>>(new Map())
     // Audio smoother for smoothing frequency bands
     const audioSmootherRef = useRef<any>(null)
     // Reusable typed array for audio input conversion (avoids GC pressure)
@@ -213,7 +222,8 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
       group: 1,
       neonTunnel: 1,
       reactiveOrb: 1,
-      particleField: 1
+      particleField: 1,
+      starField: 1
     })
 
     // --- Layer Management ---
@@ -519,50 +529,41 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
       ctx.restore()
     }, [smoothedBands])
 
-    // Render Particle Field
+    // Render Particle Field – pure 2D canvas, additive blending, no black tint
     const renderParticleField = useCallback((
       ctx: CanvasRenderingContext2D,
-      layer: any,
-      centerX: number,
-      centerY: number
+      layer: ParticleFieldLayer,
     ) => {
-      const width = canvasSizeRef.current.width
-      const height = canvasSizeRef.current.height
-
-      // Get or create renderer
-      let renderer = three3DRendererCache.current.get(layer.id)
-      if (!renderer) {
-        renderer = new ParticleFieldRenderer({
-          width,
-          height,
-          particleCount: layer.particleCount,
-          particleSize: layer.particleSize,
-          particleColor: layer.particleColor,
-          speed: layer.speed,
-          depth: layer.depth,
-          frequencyBands: layer.frequencyBands,
-          audioSensitivity: layer.audioSensitivity,
-          enableBloom: layer.enableBloom,
-          bloomStrength: layer.bloomStrength,
-          enableRGBShift: layer.enableRGBShift,
-          rgbShiftAmount: layer.rgbShiftAmount
-        })
-        three3DRendererCache.current.set(layer.id, renderer)
+      // Compute band-specific audio value using proper frequency-based bin
+      // boundaries (matching useAudioAnalyser.ts) rather than percentage-based
+      // slices.  Percentage slices (e.g. 0-10%) cover 0-2200 Hz on a 1024-bin
+      // FFT — that's bass + lower-mids, always active, never decays to 0.
+      // True bass is only bins 0-250 Hz (~11 bins at 44100 Hz / 2048 FFT).
+      let audioVal = 0
+      if (audioData.length > 0) {
+        const bands = layer.frequencyBands || ['bass', 'mid', 'high']
+        const len = audioData.length
+        // Each bin covers (sampleRate/2) / len Hz.  Assume 44100 Hz.
+        const binHz   = 22050 / len
+        const bassEnd = Math.max(1, Math.floor(250  / binHz))  // 0–250 Hz
+        const midEnd  = Math.max(bassEnd + 1, Math.floor(4000 / binHz))  // 250–4000 Hz
+        let bassSum = 0, midSum = 0, highSum = 0
+        for (let i = 0; i < len; i++) {
+          const v = audioData[i] as number
+          if (i < bassEnd)      bassSum += v
+          else if (i < midEnd)  midSum  += v
+          else                  highSum += v
+        }
+        const bv: Record<string, number> = {
+          bass: bassSum / bassEnd,
+          mid:  midSum  / (midEnd - bassEnd),
+          high: highSum / (len - midEnd),
+        }
+        for (const b of bands) audioVal += bv[b] || 0
+        if (bands.length > 0) audioVal /= bands.length
       }
-
-      // Render to off-screen canvas
-      const offscreenCanvas = renderer.render(smoothedBands, timeRef.current)
-
-      // Composite to main canvas
-      ctx.save()
-      ctx.translate(centerX + layer.x, centerY + layer.y)
-      ctx.rotate((layer.rotation * Math.PI) / 180)
-      ctx.scale(layer.scale, layer.scale)
-      ctx.globalAlpha = layer.opacity
-      ctx.globalCompositeOperation = getCompositeOperation(layer.blendMode)
-      ctx.drawImage(offscreenCanvas, -offscreenCanvas.width / 2, -offscreenCanvas.height / 2)
-      ctx.restore()
-    }, [smoothedBands])
+      renderParticleField2D(ctx, layer, audioVal, particleStateCache.current)
+    }, [audioData])
 
     // Main render function
     const render = useCallback(() => {
@@ -617,7 +618,10 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
             renderReactiveOrb(ctx, layer, centerX, centerY)
             break
           case 'particleField':
-            renderParticleField(ctx, layer, centerX, centerY)
+            renderParticleField(ctx, layer as ParticleFieldLayer)
+            break
+          case 'starField':
+            renderStarField(ctx, layer as StarFieldLayer, audioData, centerX, centerY, timeRef.current)
             break
           case 'group':
             // Groups render their children - handled separately
@@ -697,13 +701,14 @@ const AstrofoxVisualiser = forwardRef<AstrofoxVisualiserRef, AstrofoxVisualiserP
       }
     }, [isPlaying])
 
-    // Cleanup Three.js renderers on unmount
+    // Cleanup Three.js renderers and particle state on unmount
     useEffect(() => {
       return () => {
         three3DRendererCache.current.forEach((renderer) => {
           renderer.dispose()
         })
         three3DRendererCache.current.clear()
+        particleStateCache.current.clear()
       }
     }, [])
 

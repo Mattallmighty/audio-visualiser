@@ -81,6 +81,9 @@ export abstract class Three3DRenderer {
     })
     this.renderer.setSize(this.width, this.height)
     this.renderer.setPixelRatio(config.pixelRatio || 1)
+    // Clear to fully transparent so the Three.js canvas composites cleanly
+    // onto the 2D canvas regardless of blend mode.
+    this.renderer.setClearColor(0x000000, 0)
 
     // Setup post-processing if enabled
     this.setupPostProcessing()

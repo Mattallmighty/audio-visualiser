@@ -6,7 +6,7 @@
  */
 
 import { Box } from '@mui/material'
-import type { AstrofoxLayer } from '../../../engines/astrofox/types'
+import type { AstrofoxLayer, ParticleFieldLayer } from '../../../engines/astrofox/types'
 import { CommonControls } from './CommonControls'
 import { BarSpectrumControls } from './BarSpectrumControls'
 import { WaveSpectrumControls } from './WaveSpectrumControls'
@@ -19,6 +19,7 @@ import { GroupControls } from './GroupControls'
 import { NeonTunnelControls } from './NeonTunnelControls'
 import { ReactiveOrbControls } from './ReactiveOrbControls'
 import { ParticleFieldControls } from './ParticleFieldControls'
+import { StarFieldControls } from './StarFieldControls'
 
 export interface LayerControlsRendererProps {
   layer: AstrofoxLayer
@@ -64,6 +65,8 @@ export function LayerControlsRenderer({ layer, onUpdate, allLayers = [] }: Layer
         return <ReactiveOrbControls layer={layer} onUpdate={onUpdate} />
       case 'particleField':
         return <ParticleFieldControls layer={layer} onUpdate={onUpdate} />
+      case 'starField':
+        return <StarFieldControls layer={layer} onUpdate={onUpdate} />
       default:
         return null
     }
@@ -72,7 +75,12 @@ export function LayerControlsRenderer({ layer, onUpdate, allLayers = [] }: Layer
   return (
     <Box sx={{ p: 2, overflow: 'auto', maxHeight: 600 }}>
       {/* Common controls for all layer types */}
-      <CommonControls layer={layer} onUpdate={onUpdate} allLayers={allLayers} />
+      <CommonControls
+        layer={layer}
+        onUpdate={onUpdate}
+        allLayers={allLayers}
+        hideOpacity={layer.type === 'particleField' && !!(layer as ParticleFieldLayer).opacityReactive}
+      />
 
       {/* Type-specific controls */}
       {renderTypeSpecificControls()}

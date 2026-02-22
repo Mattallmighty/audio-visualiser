@@ -11,7 +11,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  SelectChangeEvent
+  SelectChangeEvent,
+  FormControlLabel,
+  Switch
 } from '@mui/material'
 import type { SoundWave2Layer } from '../../../engines/astrofox/types'
 
@@ -21,6 +23,9 @@ export interface SoundWave2ControlsProps {
 }
 
 export function SoundWave2Controls({ layer, onUpdate }: SoundWave2ControlsProps) {
+  const isCircle = layer.mode === 'circle'
+  const isBarMode = layer.barMode !== false
+
   return (
     <>
       <Typography variant="subtitle2" gutterBottom>
@@ -41,8 +46,58 @@ export function SoundWave2Controls({ layer, onUpdate }: SoundWave2ControlsProps)
         </Select>
       </FormControl>
 
-      {layer.mode === 'circle' && (
+      {isCircle && (
         <>
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={isBarMode}
+                onChange={(e) => onUpdate({ barMode: e.target.checked })}
+              />
+            }
+            label="Bar Mode (Vizzy-style)"
+            sx={{ mb: 1 }}
+          />
+
+          {isBarMode && (
+            <>
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={layer.mirror !== false}
+                    onChange={(e) => onUpdate({ mirror: e.target.checked })}
+                  />
+                }
+                label="Mirror (left-right)"
+                sx={{ mb: 1 }}
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={layer.strokeBase !== false}
+                    onChange={(e) => onUpdate({ strokeBase: e.target.checked })}
+                  />
+                }
+                label="Show Base Circle"
+                sx={{ mb: 1 }}
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={layer.inward === true}
+                    onChange={(e) => onUpdate({ inward: e.target.checked })}
+                  />
+                }
+                label="Inward Spikes"
+                sx={{ mb: 2 }}
+              />
+            </>
+          )}
+
           <Typography variant="caption" color="text.secondary">
             Radius: {layer.radius}
           </Typography>

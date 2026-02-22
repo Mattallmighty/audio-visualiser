@@ -31,7 +31,8 @@ import {
   Timeline,
   ViewInAr,
   Folder,
-  Edit
+  Edit,
+  AutoAwesome
 } from '@mui/icons-material'
 import type { AstrofoxVisualiserRef } from '../Visualisers'
 import type {
@@ -53,7 +54,8 @@ const LAYER_ICONS: Record<AstrofoxLayerType, React.ReactNode> = {
   group: <Folder fontSize="small" />,
   neonTunnel: <ViewInAr fontSize="small" />,
   reactiveOrb: <ViewInAr fontSize="small" />,
-  particleField: <ViewInAr fontSize="small" />
+  particleField: <ViewInAr fontSize="small" />,
+  starField: <AutoAwesome fontSize="small" />
 }
 
 export interface AstrofoxLayerPanelProps {
