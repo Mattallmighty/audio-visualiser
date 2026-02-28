@@ -18,6 +18,11 @@ interface AudioContextValue {
     mid: number
     high: number
   }
+  volumeData?: {
+    stream: number
+    intensity: number
+    normalized: number
+  }
   
   // Mic/analyzer state
   micData: ReturnType<typeof useAudioAnalyser>['data']
@@ -141,10 +146,20 @@ export const AudioProvider = ({ backendAudioData, children }: AudioProviderProps
     ? { bass: micData.bass, mid: micData.mid, high: micData.high }
     : calculateFrequencyBands(backendAudioData || [])
 
+  // Compute volume normalization data (only available for mic/system)
+  const volumeData = (audioSource === 'mic' || audioSource === 'system')
+    ? {
+        stream: micData.volumeStream,
+        intensity: micData.volumeIntensity,
+        normalized: micData.volumeNormalized,
+      }
+    : undefined
+
   const value: AudioContextValue = {
     activeAudioData,
     beatData,
     frequencyBands,
+    volumeData,
     micData,
     micError,
     isListening,

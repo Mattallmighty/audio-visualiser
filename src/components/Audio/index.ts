@@ -12,6 +12,7 @@ export { default as AudioStatus } from './AudioStatus'
 export { default as AudioSelector } from './AudioSelector'
 export { default as AudioInputSelector } from './AudioInputSelector'
 export { default as AudioDebugOverlay } from './AudioDebugOverlay'
+export { default as VolumeDebugOverlay } from './VolumeDebugOverlay'
 
 // Panels
 export { default as AudioStatsPanel } from './AudioStatsPanel'
