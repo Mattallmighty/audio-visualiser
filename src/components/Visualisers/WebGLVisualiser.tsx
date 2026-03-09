@@ -8,7 +8,6 @@ import {
   spectrumFragmentShader,
   particleVertexShader,
   particleFragmentShader,
-  bleepFragmentShader,
   concentricFragmentShader,
   gifFragmentShader,
   quadVertexShader,
@@ -16,27 +15,15 @@ import {
   matrixRainShader,
   terrainShader,
   geometricShader,
-  // Matrix Effects
-  gameOfLifeShader,
   digitalRainShader,
   flameShader,
   plasma2dShader,
   equalizer2dShader,
   noise2dShader,
-  // Additional Matrix Effects
-  blenderShader,
-  cloneShader,
   bandsShader,
-  bandsMatrixShader,
-  blocksShader,
-  keybeat2dShader,
-  texterShader,
-  bladeTexterShader,
-  plasmaWled2dShader,
   radialShader,
   soapShader,
-  waterfallShader,
-  imageShader
+  waterfallShader
 } from '../../engines/webgl/shaders'
 import { useStore } from '../../store'
 import type { PostProcessingControls, WebGLVisualiserProps, Particle } from './WebGLVisualiserTypes'
@@ -53,6 +40,7 @@ export const WebGLVisualiser = ({
   customShader,
   beatData,
   frequencyBands,
+  volumeData,
   theme,
   postProcessing,
   postProcessingEnabled = false,
@@ -121,6 +109,7 @@ export const WebGLVisualiser = ({
   const onContextCreatedRef = useRef(onContextCreated)
   const beatDataRef = useRef(beatData)
   const frequencyBandsRef = useRef(frequencyBands)
+  const volumeDataRef = useRef(volumeData)
   const configRef = useRef(config)
   const visualTypeRef = useRef(visualType)
 
@@ -136,10 +125,11 @@ export const WebGLVisualiser = ({
     onContextCreatedRef.current = onContextCreated
     beatDataRef.current = beatData
     frequencyBandsRef.current = frequencyBands
+    volumeDataRef.current = volumeData
     configRef.current = config
     audioDataRef.current = audioData
     visualTypeRef.current = visualType
-  }, [postProcessing, postProcessingEnabled, onContextCreated, beatData, frequencyBands, config, audioData, visualType])
+  }, [postProcessing, postProcessingEnabled, onContextCreated, beatData, frequencyBands, volumeData, config, audioData, visualType])
 
   const globalSmoothingRef = useRef(globalSmoothing)
   const whiteCircleFixRef = useRef(whiteCircleFix)
@@ -249,9 +239,6 @@ export const WebGLVisualiser = ({
         fragmentSource = particleFragmentShader
       } else if (type === 'radial3d') {
         fragmentSource = spectrumFragmentShader
-      } else if (type === 'bleep') {
-        vertexSource = quadVertexShader
-        fragmentSource = bleepFragmentShader
       } else if (type === 'concentric') {
         vertexSource = quadVertexShader
         fragmentSource = concentricFragmentShader
@@ -267,9 +254,6 @@ export const WebGLVisualiser = ({
       } else if (type === 'geometric') {
         vertexSource = quadVertexShader
         fragmentSource = geometricShader
-      } else if (type === 'gameoflife') {
-        vertexSource = quadVertexShader
-        fragmentSource = gameOfLifeShader
       } else if (type === 'digitalrain') {
         vertexSource = quadVertexShader
         fragmentSource = digitalRainShader
@@ -285,33 +269,9 @@ export const WebGLVisualiser = ({
       } else if (type === 'noise2d') {
         vertexSource = quadVertexShader
         fragmentSource = noise2dShader
-      } else if (type === 'blender') {
-        vertexSource = quadVertexShader
-        fragmentSource = blenderShader
-      } else if (type === 'clone') {
-        vertexSource = quadVertexShader
-        fragmentSource = cloneShader
       } else if (type === 'bands') {
         vertexSource = quadVertexShader
         fragmentSource = bandsShader
-      } else if (type === 'bandsmatrix') {
-        vertexSource = quadVertexShader
-        fragmentSource = bandsMatrixShader
-      } else if (type === 'blocks') {
-        vertexSource = quadVertexShader
-        fragmentSource = blocksShader
-      } else if (type === 'keybeat2d') {
-        vertexSource = quadVertexShader
-        fragmentSource = keybeat2dShader
-      } else if (type === 'texter') {
-        vertexSource = quadVertexShader
-        fragmentSource = texterShader
-      } else if (type === 'bladeTexter') {
-        vertexSource = quadVertexShader
-        fragmentSource = bladeTexterShader
-      } else if (type === 'plasmawled2d') {
-        vertexSource = quadVertexShader
-        fragmentSource = plasmaWled2dShader
       } else if (type === 'radial') {
         vertexSource = quadVertexShader
         fragmentSource = radialShader
@@ -321,9 +281,6 @@ export const WebGLVisualiser = ({
       } else if (type === 'waterfall') {
         vertexSource = quadVertexShader
         fragmentSource = waterfallShader
-      } else if (type === 'image') {
-        vertexSource = quadVertexShader
-        fragmentSource = imageShader
       }
     } else {
       vertexSource = quadVertexShader
@@ -697,45 +654,6 @@ export const WebGLVisualiser = ({
     [getLoc, getAttribLoc, handleGradients, getBuffer, getTypedArray]
   )
 
-  // Draw Bleep
-  const drawBleep = useCallback(
-    (gl: WebGLRenderingContext, data: number[] | Float32Array, width: number, height: number) => {
-      const program = programRef.current
-      if (!program) return
-      const cfg = configRef.current
-      const sensitivity = cfg.audioSensitivity ?? cfg.sensitivity ?? cfg.multiplier ?? 1.0
-      const speed = cfg.scroll_time ? 1.0 / cfg.scroll_time : 1.0
-      const avg = (data as any).reduce((a: number, b: number) => a + b, 0) / data.length
-      historyRef.current.push(avg * sensitivity)
-      if (historyRef.current.length > 128) historyRef.current.shift()
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, quadBufferRef.current)
-      const posLoc = getAttribLoc('a_position'); if (posLoc !== -1) { gl.enableVertexAttribArray(posLoc); gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0) }
-
-      if (!historyTextureRef.current) historyTextureRef.current = gl.createTexture()
-      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, historyTextureRef.current)
-      const textureData = getTypedArray('bleep_hist_arr', historyRef.current.length, Uint8Array)
-      for (let i = 0; i < historyRef.current.length; i++) textureData[i] = Math.min(255, Math.max(0, historyRef.current[i] * 255))
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, historyRef.current.length, 1, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, textureData)
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-
-      gl.uniform2f(getLoc('u_resolution'), width, height)
-      gl.uniform1f(getLoc('u_time'), ((performance.now() - startTimeRef.current) / 1000) * speed)
-      gl.uniform1i(getLoc('u_history'), 0)
-
-      const primaryColor = cfg.primaryColor ? hexToRgb(cfg.primaryColor) : themeColorsRef.current.primary
-      const secondaryColor = cfg.secondaryColor ? hexToRgb(cfg.secondaryColor) : themeColorsRef.current.secondary
-      gl.uniform3f(getLoc('u_primaryColor'), primaryColor[0], primaryColor[1], primaryColor[2])
-      gl.uniform3f(getLoc('u_secondaryColor'), secondaryColor[0], secondaryColor[1], secondaryColor[2])
-
-      handleGradients(gl, cfg)
-
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
-      gl.disableVertexAttribArray(posLoc)
-    },
-    [getLoc, getAttribLoc, handleGradients, getTypedArray]
-  )
-
   // Draw Concentric
   const drawConcentric = useCallback(
     (gl: WebGLRenderingContext, data: number[] | Float32Array, width: number, height: number) => {
@@ -833,6 +751,12 @@ export const WebGLVisualiser = ({
       gl.uniform1f(getLoc('u_mid'), mid * sensitivity)
       gl.uniform1f(getLoc('u_high'), high * sensitivity)
 
+      // Volume normalization uniforms
+      const volData = volumeDataRef.current
+      const vtLoc = getLoc('u_volumeTime'); if (vtLoc) gl.uniform1f(vtLoc, volData?.stream ?? 0)
+      const viLoc = getLoc('u_volumeIntensity'); if (viLoc) gl.uniform1f(viLoc, volData?.intensity ?? 0)
+      const vnLoc = getLoc('u_volumeNorm'); if (vnLoc) gl.uniform1f(vnLoc, volData?.normalized ?? 0)
+
       const glowMode = outerGlowModeRef.current === 'original' ? 0 : 1
       const glowLoc = getLoc('u_outerGlowMode'); if (glowLoc) gl.uniform1i(glowLoc, glowMode)
 
@@ -894,40 +818,8 @@ export const WebGLVisualiser = ({
       gl.uniform1f(getLoc('u_flip'), (cfg.align === 'invert' || cfg.flip) ? 1.0 : 0.0)
       gl.uniform1f(getLoc('u_blockSize'), cfg.block_count ?? cfg.block_size ?? 10.0)
       gl.uniform1f(getLoc('u_keys'), (cfg.stretch_horizontal / 6.25) || (cfg.keys ?? 16.0))
-      if (currentVisualType === 'texter' || currentVisualType === 'bladeTexter') {
-        // Native baseline: zoom, stretch_x, stretch_y, offset_x, offset_y are direct multipliers (1.0 = native, no inversion)
-        const zoom = typeof cfg.zoom === 'number' ? cfg.zoom : 1.0;
-        const stretchX = typeof cfg.stretch_x === 'number' ? cfg.stretch_x : 1.0;
-        const stretchY = typeof cfg.stretch_y === 'number' ? cfg.stretch_y : 1.0;
-        const offsetX = typeof cfg.offset_x === 'number' ? cfg.offset_x : 0.0;
-        const offsetY = typeof cfg.offset_y === 'number' ? cfg.offset_y : 0.0;
-        gl.uniform1f(getLoc('u_zoom'), zoom)
-        gl.uniform1f(getLoc('u_squeezeX'), stretchX)
-        gl.uniform1f(getLoc('u_squeezeY'), stretchY)
-        gl.uniform1f(getLoc('u_offsetX'), offsetX)
-        gl.uniform1f(getLoc('u_offsetY'), offsetY)
-        
-        const effectMap: Record<string, number> = { 'Side Scroll': 0, 'Spokes': 1, 'Carousel': 2, 'Wave': 3, 'Pulse': 4, 'Fade': 5 }
-        gl.uniform1i(getLoc('u_textEffect'), effectMap[cfg.text_effect] ?? 0)
-        gl.uniform1f(getLoc('u_speed'), cfg.speed_option_1 ?? 1.0)
-
-        if (currentVisualType === 'bladeTexter') {
-          gl.uniform1i(getLoc('u_textEffect2'), effectMap[cfg.text_effect2] ?? 0)
-          gl.uniform1i(getLoc('u_flipH2'), cfg.flip_horizontal2 ? 1 : 0)
-          gl.uniform1i(getLoc('u_flipV2'), cfg.flip_vertical2 ? 1 : 0)
-          gl.uniform1f(getLoc('u_rotate2'), (cfg.rotate2 ?? 0) * Math.PI / 180)
-          gl.uniform1f(getLoc('u_zoom2'), cfg.zoom2 ?? 1.0)
-          gl.uniform1f(getLoc('u_squeezeX2'), cfg.stretch_x2 ?? 1.0)
-          gl.uniform1f(getLoc('u_squeezeY2'), cfg.stretch_y2 ?? 1.0)
-          gl.uniform1f(getLoc('u_offsetX2'), cfg.offset_x2 ?? 0.0)
-          gl.uniform1f(getLoc('u_offsetY2'), cfg.offset_y2 ?? 0.0)
-          gl.uniform1f(getLoc('u_speed2'), cfg.speed2 ?? 1.0)
-        }
-
-        handleTextTexture(gl, cfg)
-      }
       if (currentVisualType === 'radial') gl.uniform1f(getLoc('u_bands'), cfg.edges || cfg.bands || 32.0)
-      if (currentVisualType === 'bands' || currentVisualType === 'bandsmatrix') gl.uniform1f(getLoc('u_bands'), cfg.band_count || cfg.bands || 16.0)
+      if (currentVisualType === 'bands') gl.uniform1f(getLoc('u_bands'), cfg.band_count || cfg.bands || 16.0)
       if (currentVisualType === 'waterfall') {
         gl.uniform1f(getLoc('u_bands'), cfg.bands || 16.0)
         gl.uniform1f(getLoc('u_speed'), (3.0 / cfg.drop_secs) || (cfg.speed ?? 1.0))
@@ -939,8 +831,6 @@ export const WebGLVisualiser = ({
       gl.uniform1f(getLoc('u_minSize'), cfg.min_size ?? 0.3)
       gl.uniform1f(getLoc('u_frequencyRange'), typeof cfg.frequency_range === 'number' ? cfg.frequency_range : 0.0)
       gl.uniform1f(getLoc('u_clip'), cfg.clip ? 1.0 : 0.0)
-      if (currentVisualType === 'image') gl.uniform1f(getLoc('u_spin'), cfg.spin ? 1.0 : 0.0)
-
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
       gl.disableVertexAttribArray(posLoc)
     },
@@ -985,7 +875,6 @@ export const WebGLVisualiser = ({
         case 'particles': drawParticles(gl, smoothedData, width, height); break
         case 'waveform3d': drawWaveform3D(gl, smoothedData, width, height); break
         case 'radial3d': drawRadial3D(gl, smoothedData, width, height); break
-        case 'bleep': drawBleep(gl, smoothedData, width, height); break
         case 'concentric': drawConcentric(gl, smoothedData, width, height); break
         default: drawCustom(gl, smoothedData, width, height); break
       }
@@ -993,10 +882,10 @@ export const WebGLVisualiser = ({
 
     if (ppEnabled) {
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, null); gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, width, height)
-      const bd = beatDataRef.current; pp.updateTime(deltaTime, bd ? { isBeat: bd.isBeat, beatPhase: bd.beatPhase, beatIntensity: bd.beatIntensity } : undefined); pp.render(width, height)
+      const bd = beatDataRef.current; const vd = volumeDataRef.current; pp.updateTime(deltaTime, bd ? { isBeat: bd.isBeat, beatPhase: bd.beatPhase, beatIntensity: bd.beatIntensity } : undefined, vd); pp.render(width, height)
     }
     animationRef.current = requestAnimationFrame(draw)
-  }, [getSmoothData, drawBars3D, drawParticles, drawWaveform3D, drawRadial3D, drawBleep, drawConcentric, drawCustom, customShader])
+  }, [getSmoothData, drawBars3D, drawParticles, drawWaveform3D, drawRadial3D, drawConcentric, drawCustom, customShader])
 
   // Initialize and cleanup
   useEffect(() => {

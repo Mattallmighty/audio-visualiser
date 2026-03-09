@@ -19,7 +19,8 @@ import {
   PixelatePass,
   MirrorPass,
   DotScreenPass,
-  BadTVPass
+  BadTVPass,
+  ChromaticAberrationPass
 } from '../engines/webgl/postprocessing/passes'
 import type {
   BloomConfig,
@@ -33,7 +34,8 @@ import type {
   PixelateConfig,
   MirrorConfig,
   DotScreenConfig,
-  BadTVConfig
+  BadTVConfig,
+  ChromaticAberrationConfig
 } from '../engines/webgl/postprocessing/passes'
 
 export interface PostProcessingConfig {
@@ -49,6 +51,7 @@ export interface PostProcessingConfig {
   mirror?: MirrorConfig & { enabled?: boolean }
   dotScreen?: DotScreenConfig & { enabled?: boolean }
   badTV?: BadTVConfig & { enabled?: boolean }
+  chromaticAberration?: ChromaticAberrationConfig & { enabled?: boolean }
 }
 
 export interface PostProcessingState {
@@ -62,6 +65,12 @@ export interface BeatData {
   beatIntensity: number
 }
 
+export interface VolumeData {
+  stream: number
+  intensity: number
+  normalized: number
+}
+
 export interface PostProcessingControls {
   composer: Composer | null
   getInputFramebuffer: () => WebGLFramebuffer | null
@@ -69,7 +78,7 @@ export interface PostProcessingControls {
   setConfig: (config: Partial<PostProcessingConfig>) => void
   toggleEffect: (effect: keyof PostProcessingConfig, enabled: boolean) => void
   triggerGlitch: (intensity?: number, duration?: number) => void
-  updateTime: (deltaTime: number, beatData?: BeatData) => void
+  updateTime: (deltaTime: number, beatData?: BeatData, volumeData?: VolumeData) => void
   dispose: () => void
 }
 
@@ -92,6 +101,7 @@ export function usePostProcessing(
     mirror: MirrorPass | null
     dotScreen: DotScreenPass | null
     badTV: BadTVPass | null
+    chromaticAberration: ChromaticAberrationPass | null
   }>({
     bloom: null,
     kaleidoscope: null,
@@ -104,7 +114,8 @@ export function usePostProcessing(
     pixelate: null,
     mirror: null,
     dotScreen: null,
-    badTV: null
+    badTV: null,
+    chromaticAberration: null
   })
 
   const configRef = useRef<PostProcessingConfig>({})
@@ -144,7 +155,8 @@ export function usePostProcessing(
       pixelate: new PixelatePass(),
       mirror: new MirrorPass(),
       dotScreen: new DotScreenPass(),
-      badTV: new BadTVPass()
+      badTV: new BadTVPass(),
+      chromaticAberration: new ChromaticAberrationPass()
     }
 
     setState((prev) => {
@@ -167,7 +179,8 @@ export function usePostProcessing(
         pixelate: null,
         mirror: null,
         dotScreen: null,
-        badTV: null
+        badTV: null,
+        chromaticAberration: null
       }
       composerRef.current = null
       setState({ isInitialized: false, enabledEffects: [] })
@@ -213,6 +226,12 @@ export function usePostProcessing(
       passes.bloom.updateConfig(config.bloom)
       composer.addPass(passes.bloom)
       enabledEffects.push('bloom')
+    }
+
+    if (config.chromaticAberration?.enabled && passes.chromaticAberration) {
+      passes.chromaticAberration.updateConfig(config.chromaticAberration)
+      composer.addPass(passes.chromaticAberration)
+      enabledEffects.push('chromaticAberration')
     }
 
     if (config.godRays?.enabled && passes.godRays) {
@@ -327,13 +346,17 @@ export function usePostProcessing(
   }, [])
 
   // Update time-based effects
-  const updateTime = useCallback((deltaTime: number, beatData?: BeatData): void => {
+  const updateTime = useCallback((deltaTime: number, beatData?: BeatData, volumeData?: VolumeData): void => {
     const passes = passesRef.current
     // Update passes that have time-based animations
     if (passes.glitch) passes.glitch.update()
     if (passes.filmGrain) passes.filmGrain.update(deltaTime)
     if (passes.badTV) passes.badTV.update(deltaTime)
     if (passes.kaleidoscope) passes.kaleidoscope.update(deltaTime, beatData)
+    // Volume-driven pass updates
+    if (passes.chromaticAberration && volumeData) {
+      passes.chromaticAberration.updateVolume(volumeData.intensity)
+    }
   }, [])
 
   // Dispose

@@ -6,7 +6,7 @@ export type WebGLVisualisationType = WebGLVisualiserId
 export interface PostProcessingControls {
   getInputFramebuffer: () => WebGLFramebuffer | null
   render: (width?: number, height?: number) => void
-  updateTime: (deltaTime: number, beatData?: { isBeat: boolean; beatPhase: number; beatIntensity: number }) => void
+  updateTime: (deltaTime: number, beatData?: { isBeat: boolean; beatPhase: number; beatIntensity: number }, volumeData?: { stream: number; intensity: number; normalized: number }) => void
 }
 
 export interface WebGLVisualiserProps {
@@ -25,6 +25,11 @@ export interface WebGLVisualiserProps {
     bass: number
     mid: number
     high: number
+  }
+  volumeData?: {
+    stream: number       // Accumulated animation time (use as u_volumeTime)
+    intensity: number    // Combined intensity multiplier (use as u_volumeIntensity)
+    normalized: number   // Raw normalized volume (use as u_volumeNorm)
   }
   theme: Theme
   postProcessing?: PostProcessingControls

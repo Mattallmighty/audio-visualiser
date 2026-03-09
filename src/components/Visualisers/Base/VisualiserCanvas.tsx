@@ -11,6 +11,7 @@ import {
   FluidVisualiser,
   WaveMountainVisualiser,
   BladeWaveVisualizer,
+  BladeTexterVisualiser,
   HexGridVisualiser,
   SpiralGalaxyVisualiser,
   AuroraBorealisVisualiser,
@@ -19,7 +20,7 @@ import {
   AstrofoxVisualiser,
   type AstrofoxVisualiserRef
 } from '..'
-import { AudioDebugOverlay, useAudio } from '../../Audio'
+import { AudioDebugOverlay, VolumeDebugOverlay, useAudio } from '../../Audio'
 import { CanvasContainer, VisualizerViewport } from '../../Layout'
 import { DEFAULT_CONFIGS } from '../../../_generated/webgl/defaults'
 
@@ -28,6 +29,7 @@ const VISUALIZER_COMPONENTS: Record<string, React.ComponentType<any>> = {
   fluid: FluidVisualiser,
   wavemountain: WaveMountainVisualiser,
   bladewave: BladeWaveVisualizer,
+  bladetexter: BladeTexterVisualiser,
   hexgrid: HexGridVisualiser,
   spiralgalaxy: SpiralGalaxyVisualiser,
   auroraborealis: AuroraBorealisVisualiser,
@@ -61,6 +63,7 @@ export const VisualiserCanvas = ({
     activeAudioData,
     beatData,
     frequencyBands,
+    volumeData,
     micData,
     getStream
   } = useAudio()
@@ -73,7 +76,8 @@ export const VisualiserCanvas = ({
   const fullScreen = useStore(state => state.fullScreen)
   const setFullScreen = useStore(state => state.setFullScreen)
   const fxEnabled = useStore(state => state.fxEnabled)
-  
+  const volumeNormalizerSettings = useStore(state => state.volumeNormalizer)
+
   const butterchurnConfig = useStore(state => state.butterchurnConfig)
   const updateButterchurnConfig = useStore(state => state.updateButterchurnConfig)
   const astrofoxConfig = useStore(state => state.astrofoxConfig)
@@ -162,6 +166,7 @@ export const VisualiserCanvas = ({
                 customShader={activeCustomShader}
                 beatData={beatData}
                 frequencyBands={frequencyBands}
+                volumeData={volumeData}
                 onContextCreated={handleContextCreated}
                 postProcessing={ppControls}
                 postProcessingEnabled={fxEnabled && ppState.isInitialized}
@@ -169,9 +174,20 @@ export const VisualiserCanvas = ({
             )
           })()}
 
-          {/* Debug Overlay */}
+          {/* Audio Debug Overlay */}
           {!configData?.background && showOverlays && config.developer_mode && audioSource === 'mic' && (
             <AudioDebugOverlay key="audio-debug-overlay" micData={micData} />
+          )}
+
+          {/* Volume Normalizer Debug Overlay */}
+          {!configData?.background && showOverlays && volumeNormalizerSettings.showDebug && volumeData && (
+            <VolumeDebugOverlay
+              key="volume-debug-overlay"
+              stream={volumeData.stream}
+              intensity={volumeData.intensity}
+              normalized={volumeData.normalized}
+              preset={volumeNormalizerSettings.preset}
+            />
           )}
 
           {/* Fullscreen Exit Button */}

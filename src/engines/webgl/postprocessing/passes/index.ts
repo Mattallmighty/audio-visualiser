@@ -38,3 +38,6 @@ export type { DotScreenConfig } from './DotScreenPass'
 
 export { BadTVPass } from './BadTVPass'
 export type { BadTVConfig } from './BadTVPass'
+
+export { ChromaticAberrationPass } from './ChromaticAberrationPass'
+export type { ChromaticAberrationConfig } from './ChromaticAberrationPass'

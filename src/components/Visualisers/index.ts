@@ -22,6 +22,7 @@ export {
 export { default as FluidVisualiser } from './FluidVisualiser'
 export { default as WaveMountainVisualiser } from './WaveMountainVisualiser'
 export { default as BladeWaveVisualizer } from './BladeWaveVisualizer'
+export { default as BladeTexterVisualiser } from './BladeTexterVisualiser'
 export { default as HexGridVisualiser } from './HexGridVisualiser'
 export { default as SpiralGalaxyVisualiser } from './SpiralGalaxyVisualiser'
 export { default as AuroraBorealisVisualiser } from './AuroraBorealisVisualiser'

@@ -22,8 +22,9 @@ const storePostProcessing = (set: any) => ({
   ppConfig: {
     pixelate: { enabled: false, scale: 1, beatSync: false, beatAmount: 0 },
     kaleidoscope: { enabled: true, sides: 6, angle: 0, rotationSpeed: 0.3, beatSync: true, beatAmount: 0.5 },
-    bloom: { enabled: true, threshold: 0.3, intensity: 0.8, radius: 5 },
-    vignette: { enabled: true, radius: 0.7, softness: 0.5, intensity: 0.5 }
+    bloom: { enabled: true, threshold: 0.3, intensity: 0.8, radius: 5, toneMapping: true },
+    vignette: { enabled: true, radius: 0.7, softness: 0.5, intensity: 0.5 },
+    chromaticAberration: { enabled: false, amount: 0.004 }
   } as PostProcessingConfig,
   glContext: null as WebGLRenderingContext | null,
   canvasSize: { width: 800, height: 600 },

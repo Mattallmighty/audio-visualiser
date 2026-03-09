@@ -1,10 +1,12 @@
 /**
- * BPMDetector - Improved BPM detection using histogram method
+ * BPMDetector - Histogram-based BPM detection with harmonic correction
  *
- * Uses multiple approaches for robust BPM detection:
- * 1. Inter-onset interval histogram
- * 2. Autocorrelation
- * 3. Beat interval clustering
+ * Algorithm:
+ * 1. Detect beat onsets via adaptive threshold on bass-weighted energy (median-based)
+ * 2. Build inter-onset interval histogram with 2-BPM-wide bins
+ * 3. Decay histogram over time (per-frame), not per-beat
+ * 4. Score peaks using harmonic ballot: sum evidence for harmonics (½×, 2×, 3×)
+ * 5. Prefer musical tempo range (60-180 BPM)
  */
 
 export interface BPMResult {
@@ -16,37 +18,35 @@ export interface BPMResult {
 }
 
 export interface BPMConfig {
-  // BPM range to search
   minBPM: number
   maxBPM: number
-
-  // Detection sensitivity
   beatThreshold: number
   histogramSmoothing: number
-
-  // Temporal settings
-  historyDuration: number // ms
-  stabilityFrames: number // Frames to wait before changing BPM
+  historyDuration: number  // ms
+  stabilityFrames: number
 }
 
 const DEFAULT_CONFIG: BPMConfig = {
   minBPM: 60,
   maxBPM: 200,
-  beatThreshold: 0.15, // Lowered for microphone sensitivity
+  beatThreshold: 0.15,
   histogramSmoothing: 0.85,
-  historyDuration: 8000, // 8 seconds for faster response
-  stabilityFrames: 15 // Faster BPM lock
+  historyDuration: 8000,
+  stabilityFrames: 15,
 }
 
-/**
- * BPMDetector class
- */
+/** Bin width in BPM for histogram quantization */
+const BIN_WIDTH = 2
+
 export class BPMDetector {
   private config: BPMConfig
 
   // Beat history
   private beatTimes: number[] = []
-  private intervalHistogram: Map<number, number> = new Map()
+
+  // Histogram: key = bin index, value = accumulated weight
+  private histogram: Map<number, number> = new Map()
+  private lastDecayTime: number = 0
 
   // State
   private currentBPM: number = 120
@@ -59,27 +59,32 @@ export class BPMDetector {
   private stableFrameCount: number = 0
   private previousEnergy: number = 0
 
+  // Adaptive threshold state (circular buffer for median)
+  private energyWindow: number[] = []
+  private static readonly ENERGY_WINDOW = 60 // ~1s at 60fps
+
   constructor(config: Partial<BPMConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
   }
 
   /**
-   * Detect beats and update BPM estimate
+   * Main entry point - call once per animation frame.
    */
-  detect(energy: number, bass: number): BPMResult {
-    const now = Date.now()
+  detect(energy: number, bass: number, now: number = Date.now()): BPMResult {
+    // Decay histogram per frame (not per beat)
+    this.decayHistogram(now)
 
-    // Detect beat onset (rising edge of energy)
-    const isBeat = this.detectBeatOnset(energy, bass)
+    // Detect beat onset
+    const isBeat = this.detectBeatOnset(energy, bass, now)
 
     if (isBeat) {
       this.recordBeat(now)
     }
 
-    // Clean old beats
+    // Prune old beats
     this.cleanHistory(now)
 
-    // Update BPM estimate periodically
+    // Update BPM estimate when we have enough beats
     if (this.beatTimes.length >= 4) {
       this.updateBPMEstimate()
     }
@@ -87,8 +92,7 @@ export class BPMDetector {
     // Calculate beat phase
     if (this.currentBPM > 0 && this.lastBeatTime > 0) {
       const beatInterval = 60000 / this.currentBPM
-      const timeSinceLastBeat = now - this.lastBeatTime
-      this.beatPhase = (timeSinceLastBeat % beatInterval) / beatInterval
+      this.beatPhase = ((now - this.lastBeatTime) % beatInterval) / beatInterval
     }
 
     this.previousEnergy = energy
@@ -98,43 +102,34 @@ export class BPMDetector {
       confidence: this.bpmConfidence,
       lastBeatTime: this.lastBeatTime,
       beatPhase: this.beatPhase,
-      isBeat
+      isBeat,
     }
   }
 
-  // Running average for adaptive threshold
-  private energyHistory: number[] = []
-  private avgEnergy: number = 0
+  // ─── Beat onset detection ────────────────────────────────────────────────
 
-  /**
-   * Detect beat onset using adaptive threshold
-   */
-  private detectBeatOnset(energy: number, bass: number): boolean {
-    // Use bass-weighted energy for beat detection
-    const weightedEnergy = bass * 0.7 + energy * 0.3
+  private detectBeatOnset(energy: number, bass: number, now: number): boolean {
+    const weighted = bass * 0.7 + energy * 0.3
 
-    // Update energy history for adaptive threshold
-    this.energyHistory.push(weightedEnergy)
-    if (this.energyHistory.length > 43) { // ~0.7 seconds at 60fps
-      this.energyHistory.shift()
+    // Maintain rolling window
+    this.energyWindow.push(weighted)
+    if (this.energyWindow.length > BPMDetector.ENERGY_WINDOW) {
+      this.energyWindow.shift()
     }
 
-    // Calculate average energy
-    this.avgEnergy = this.energyHistory.reduce((a, b) => a + b, 0) / this.energyHistory.length
+    // Median-based adaptive threshold (robust against loud transients)
+    const sorted = [...this.energyWindow].sort((a, b) => a - b)
+    const median = sorted[Math.floor(sorted.length / 2)]
 
-    // Rising edge detection with adaptive threshold
-    const energyDerivative = weightedEnergy - this.previousEnergy
-    const adaptiveThreshold = Math.max(this.config.beatThreshold * 0.5, this.avgEnergy * 0.2) // Increased sensitivity
+    const derivative = weighted - this.previousEnergy
+    const threshold = Math.max(this.config.beatThreshold * 0.5, median * 0.2)
 
-    // Beat occurs on significant energy increase above average
-    const isAboveAvg = weightedEnergy > this.avgEnergy * 1.15 // Lowered from 1.3
-    const hasRisingEdge = energyDerivative > adaptiveThreshold
+    const isAboveMedian = weighted > median * 1.15
+    const hasRisingEdge = derivative > threshold
 
-    if (hasRisingEdge && isAboveAvg) {
-      // Minimum time between beats (max 300 BPM = 200ms)
-      const minInterval = 180
-      const now = Date.now()
-
+    if (hasRisingEdge && isAboveMedian) {
+      // Refractory period derived from max BPM
+      const minInterval = Math.floor(60000 / this.config.maxBPM)
       if (now - this.lastBeatTime > minInterval) {
         return true
       }
@@ -143,96 +138,84 @@ export class BPMDetector {
     return false
   }
 
-  /**
-   * Record a beat occurrence
-   */
-  private recordBeat(time: number): void {
-    this.beatTimes.push(time)
-    this.lastBeatTime = time
+  // ─── Beat recording & histogram ──────────────────────────────────────────
 
-    // Update interval histogram
-    if (this.beatTimes.length >= 2) {
-      const interval = time - this.beatTimes[this.beatTimes.length - 2]
+  private recordBeat(time: number): void {
+    if (this.beatTimes.length > 0) {
+      const interval = time - this.beatTimes[this.beatTimes.length - 1]
       this.addToHistogram(interval)
     }
+    this.beatTimes.push(time)
+    this.lastBeatTime = time
+  }
+
+  private bpmToBin(bpm: number): number {
+    return Math.round(bpm / BIN_WIDTH)
+  }
+
+  private binToBpm(bin: number): number {
+    return bin * BIN_WIDTH
+  }
+
+  private addToHistogram(intervalMs: number): void {
+    const bpm = 60000 / intervalMs
+    if (bpm < this.config.minBPM || bpm > this.config.maxBPM) return
+
+    const bin = this.bpmToBin(bpm)
+    this.histogram.set(bin, (this.histogram.get(bin) ?? 0) + 1)
   }
 
   /**
-   * Add interval to histogram with quantization
+   * Time-based histogram decay: applied once per frame, not per beat.
+   * This prevents over-decay at high tempos where beats come fast.
    */
-  private addToHistogram(interval: number): void {
-    const { minBPM, maxBPM } = this.config
+  private decayHistogram(now: number): void {
+    if (this.lastDecayTime === 0) {
+      this.lastDecayTime = now
+      return
+    }
+    const dt = now - this.lastDecayTime
+    this.lastDecayTime = now
 
-    // Convert to BPM
-    const bpm = 60000 / interval
+    // Decay factor: histogramSmoothing^(dt/16.67) keeps it frame-rate independent
+    const decay = Math.pow(this.config.histogramSmoothing, dt / 16.67)
 
-    // Check if in valid range
-    if (bpm < minBPM || bpm > maxBPM) return
-
-    // Quantize to nearest BPM
-    const quantizedBPM = Math.round(bpm)
-
-    // Update histogram with smoothing
-    const current = this.intervalHistogram.get(quantizedBPM) || 0
-    this.intervalHistogram.set(quantizedBPM, current + 1)
-
-    // Decay old values
-    const { histogramSmoothing } = this.config
-    this.intervalHistogram.forEach((value, key) => {
-      this.intervalHistogram.set(key, value * histogramSmoothing)
-    })
-
-    // Remove very low values
-    this.intervalHistogram.forEach((value, key) => {
-      if (value < 0.1) {
-        this.intervalHistogram.delete(key)
+    this.histogram.forEach((value, key) => {
+      const newVal = value * decay
+      if (newVal < 0.05) {
+        this.histogram.delete(key)
+      } else {
+        this.histogram.set(key, newVal)
       }
     })
   }
 
-  /**
-   * Update BPM estimate from histogram
-   */
+  // ─── BPM estimation ───────────────────────────────────────────────────────
+
   private updateBPMEstimate(): void {
-    if (this.intervalHistogram.size === 0) return
+    if (this.histogram.size === 0) return
 
-    // Find peaks in histogram
-    const peaks = this.findHistogramPeaks()
+    const scored = this.scorePeaksWithHarmonics()
+    if (scored.length === 0) return
 
-    if (peaks.length === 0) return
+    const best = scored[0]
+    this.bpmCandidates.push(best.bpm)
+    if (this.bpmCandidates.length > 10) this.bpmCandidates.shift()
 
-    // Get the strongest peak
-    const bestCandidate = peaks[0]
+    // Check stability (low std-dev over recent candidates)
+    const avg = this.bpmCandidates.reduce((a, b) => a + b, 0) / this.bpmCandidates.length
+    const variance = this.bpmCandidates.reduce((s, b) => s + (b - avg) ** 2, 0) / this.bpmCandidates.length
+    const stdDev = Math.sqrt(variance)
 
-    // Track BPM stability
-    this.bpmCandidates.push(bestCandidate.bpm)
-    if (this.bpmCandidates.length > 10) {
-      this.bpmCandidates.shift()
-    }
-
-    // Calculate candidate agreement
-    const candidateAvg = this.bpmCandidates.reduce((a, b) => a + b, 0) / this.bpmCandidates.length
-    const candidateStdDev = Math.sqrt(
-      this.bpmCandidates.reduce((sum, bpm) => sum + Math.pow(bpm - candidateAvg, 2), 0) /
-        this.bpmCandidates.length
-    )
-
-    // If candidates are stable, update BPM
-    if (candidateStdDev < 5) {
+    if (stdDev < 5) {
       this.stableFrameCount++
-
       if (this.stableFrameCount >= this.config.stabilityFrames) {
-        // Use rounded average as the BPM
-        const newBPM = Math.round(candidateAvg)
-
-        // Only update if significantly different
-        if (Math.abs(newBPM - this.currentBPM) > 2) {
+        const newBPM = Math.round(avg / BIN_WIDTH) * BIN_WIDTH
+        if (Math.abs(newBPM - this.currentBPM) > BIN_WIDTH) {
           this.currentBPM = newBPM
         }
-
-        // Calculate confidence based on peak strength and stability
-        const totalWeight = Array.from(this.intervalHistogram.values()).reduce((a, b) => a + b, 0)
-        this.bpmConfidence = Math.min(1, (bestCandidate.weight / totalWeight) * 2)
+        const totalWeight = Array.from(this.histogram.values()).reduce((a, b) => a + b, 0)
+        this.bpmConfidence = Math.min(1, (best.score / Math.max(1, totalWeight)) * 2)
       }
     } else {
       this.stableFrameCount = 0
@@ -240,91 +223,90 @@ export class BPMDetector {
   }
 
   /**
-   * Find peaks in the histogram
+   * Score each histogram bin using a harmonic ballot:
+   * - A peak at BPM B gets credit for supporting peaks at B/2, B/3, 2B, 3B
+   * - Prefer musical range (60–180 BPM) by slightly boosting those bins
    */
-  private findHistogramPeaks(): Array<{ bpm: number; weight: number }> {
-    const peaks: Array<{ bpm: number; weight: number }> = []
-    const entries = Array.from(this.intervalHistogram.entries()).sort((a, b) => b[1] - a[1])
+  private scorePeaksWithHarmonics(): Array<{ bpm: number; score: number }> {
+    if (this.histogram.size === 0) return []
 
-    // Get top candidates
-    for (const [bpm, weight] of entries.slice(0, 5)) {
-      peaks.push({ bpm, weight })
-    }
+    const harmonicRatios = [0.5, 1 / 3, 2, 3, 1.5, 2 / 3]
+    const harmonicWeights = [0.5, 0.25, 0.4, 0.2, 0.3, 0.3]
 
-    // Also check for harmonic relationships (half/double time)
-    for (const peak of [...peaks]) {
-      // Check double time
-      const doubleBPM = peak.bpm * 2
-      if (doubleBPM <= this.config.maxBPM) {
-        const doubleWeight = this.intervalHistogram.get(Math.round(doubleBPM)) || 0
-        if (doubleWeight > peak.weight * 0.3) {
-          // Prefer the faster tempo if it has significant support
-          peak.bpm = doubleBPM
+    const scored: Array<{ bpm: number; score: number }> = []
+
+    this.histogram.forEach((weight, bin) => {
+      const bpm = this.binToBpm(bin)
+      let score = weight
+
+      // Add harmonic evidence
+      harmonicRatios.forEach((ratio, i) => {
+        const harmonicBpm = bpm * ratio
+        if (harmonicBpm >= this.config.minBPM && harmonicBpm <= this.config.maxBPM) {
+          const harmonicBin = this.bpmToBin(harmonicBpm)
+          // Check bin and neighbours (±1 bin)
+          for (let delta = -1; delta <= 1; delta++) {
+            const neighbourWeight = this.histogram.get(harmonicBin + delta) ?? 0
+            score += neighbourWeight * harmonicWeights[i] * (1 - Math.abs(delta) * 0.4)
+          }
         }
-      }
+      })
 
-      // Check half time
-      const halfBPM = peak.bpm / 2
-      if (halfBPM >= this.config.minBPM) {
-        const halfWeight = this.intervalHistogram.get(Math.round(halfBPM)) || 0
-        if (halfWeight > peak.weight * 0.5) {
-          // Keep slower tempo if it has stronger support
-          peak.bpm = halfBPM
-        }
-      }
-    }
+      // Mild boost for musical range 60–180 BPM
+      if (bpm >= 60 && bpm <= 180) score *= 1.1
 
-    return peaks.sort((a, b) => b.weight - a.weight)
+      scored.push({ bpm, score })
+    })
+
+    return scored.sort((a, b) => b.score - a.score)
   }
 
-  /**
-   * Clean old beats from history
-   */
-  private cleanHistory(now: number): void {
-    const { historyDuration } = this.config
-    const cutoff = now - historyDuration
+  // ─── History management ───────────────────────────────────────────────────
 
+  private cleanHistory(now: number): void {
+    const cutoff = now - this.config.historyDuration
     while (this.beatTimes.length > 0 && this.beatTimes[0] < cutoff) {
       this.beatTimes.shift()
     }
   }
 
-  /**
-   * Get time until next predicted beat
-   */
+  // ─── Public helpers ───────────────────────────────────────────────────────
+
   getTimeUntilNextBeat(): number {
     if (this.currentBPM <= 0 || this.lastBeatTime <= 0) return -1
-
     const beatInterval = 60000 / this.currentBPM
     const now = Date.now()
-    const timeSinceLastBeat = now - this.lastBeatTime
-    const timeUntilNext = beatInterval - (timeSinceLastBeat % beatInterval)
-
-    return timeUntilNext
+    return beatInterval - ((now - this.lastBeatTime) % beatInterval)
   }
 
-  /**
-   * Get beat times within recent history
-   */
   getBeatHistory(): number[] {
     return [...this.beatTimes]
   }
 
-  /**
-   * Get the interval histogram for visualization
-   */
   getHistogram(): Array<{ bpm: number; weight: number }> {
-    return Array.from(this.intervalHistogram.entries())
-      .map(([bpm, weight]) => ({ bpm, weight }))
+    return Array.from(this.histogram.entries())
+      .map(([bin, weight]) => ({ bpm: this.binToBpm(bin), weight }))
       .sort((a, b) => a.bpm - b.bpm)
   }
 
-  /**
-   * Reset the detector
-   */
+  tap(): void {
+    const now = Date.now()
+    this.recordBeat(now)
+    if (this.beatTimes.length >= 4) {
+      const recent = this.beatTimes.slice(-8)
+      let total = 0
+      for (let i = 1; i < recent.length; i++) total += recent[i] - recent[i - 1]
+      const tapped = Math.round(60000 / (total / (recent.length - 1)))
+      if (tapped >= this.config.minBPM && tapped <= this.config.maxBPM) {
+        this.currentBPM = tapped
+        this.bpmConfidence = 0.9
+      }
+    }
+  }
+
   reset(): void {
     this.beatTimes = []
-    this.intervalHistogram.clear()
+    this.histogram.clear()
     this.currentBPM = 120
     this.bpmConfidence = 0
     this.lastBeatTime = 0
@@ -332,60 +314,25 @@ export class BPMDetector {
     this.bpmCandidates = []
     this.stableFrameCount = 0
     this.previousEnergy = 0
-    this.energyHistory = []
-    this.avgEnergy = 0
+    this.energyWindow = []
+    this.lastDecayTime = 0
   }
 
-  /**
-   * Tap tempo - manually tap to set BPM
-   */
-  tap(): void {
-    const now = Date.now()
-
-    // Treat tap as a beat
-    this.recordBeat(now)
-
-    // If we have enough taps, calculate BPM directly
-    if (this.beatTimes.length >= 4) {
-      const recentTaps = this.beatTimes.slice(-8)
-      let totalInterval = 0
-      for (let i = 1; i < recentTaps.length; i++) {
-        totalInterval += recentTaps[i] - recentTaps[i - 1]
-      }
-      const avgInterval = totalInterval / (recentTaps.length - 1)
-      const tappedBPM = Math.round(60000 / avgInterval)
-
-      if (tappedBPM >= this.config.minBPM && tappedBPM <= this.config.maxBPM) {
-        this.currentBPM = tappedBPM
-        this.bpmConfidence = 0.9 // High confidence from manual tap
-      }
-    }
-  }
-
-  /**
-   * Update configuration
-   */
   updateConfig(config: Partial<BPMConfig>): void {
     this.config = { ...this.config, ...config }
   }
 
-  /**
-   * Get current state
-   */
   getState(): BPMResult {
     return {
       bpm: this.currentBPM,
       confidence: this.bpmConfidence,
       lastBeatTime: this.lastBeatTime,
       beatPhase: this.beatPhase,
-      isBeat: false // Only true during detect()
+      isBeat: false,
     }
   }
 }
 
-/**
- * Factory function
- */
 export function createBPMDetector(config?: Partial<BPMConfig>): BPMDetector {
   return new BPMDetector(config)
 }

@@ -52,6 +52,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
   const setShowCode = useStore(state => state.setShowCode)
   const shaderCode = useStore(state => state.shaderCode)
   const setShaderCode = useStore(state => state.setShaderCode)
+  const loadShaderTemplate = useStore(state => state.loadShaderTemplate)
   const astrofoxConfig = useStore(state => state.astrofoxConfig)
   const setAstrofoxConfig = useStore(state => state.setAstrofoxConfig)
   const astrofoxReady = useStore(state => state.astrofoxReady)
@@ -76,6 +77,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
   const setOuterGlowMode = useStore(state => state.setOuterGlowMode)
   const textAutoFit = useStore(state => state.textAutoFit)
   const setTextAutoFit = useStore(state => state.setTextAutoFit)
+  const volumeNormalizer = useStore(state => state.volumeNormalizer)
+  const setVolumeNormalizerPreset = useStore(state => state.setVolumeNormalizerPreset)
+  const setVolumeNormalizerEnabled = useStore(state => state.setVolumeNormalizerEnabled)
+  const setVolumeNormalizerShowDebug = useStore(state => state.setVolumeNormalizerShowDebug)
 
   const setFluidConfig = (update: any) => {
     updateVisualizerConfig('fluid', typeof update === 'function' ? update(fluidConfig) : update)
@@ -107,6 +112,12 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
 
         {showCode ? (
           <Box sx={{ p: 0 }}>
+            <Box sx={{ mb: 1, p: 1, bgcolor: 'rgba(0,0,0,0.3)', borderRadius: 1, fontSize: '0.65rem', fontFamily: 'monospace', color: '#aaa', lineHeight: 1.6 }}>
+              <Typography variant="caption" sx={{ color: '#81c784', display: 'block', mb: 0.5 }}>Available uniforms</Typography>
+              u_time · u_energy · u_beat · u_bass · u_mid · u_high<br/>
+              <span style={{ color: '#4fc3f7' }}>u_volumeTime</span> · <span style={{ color: '#4fc3f7' }}>u_volumeIntensity</span> · <span style={{ color: '#4fc3f7' }}>u_volumeNorm</span><br/>
+              u_primaryColor · u_secondaryColor · u_resolution · v_position
+            </Box>
             <TextField
               fullWidth
               multiline
@@ -115,12 +126,17 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
               value={shaderCode}
               onChange={(e) => setShaderCode(e.target.value)}
               variant="outlined"
-              sx={{ fontFamily: 'monospace', mb: 2 }}
+              sx={{ fontFamily: 'monospace', mb: 1 }}
               inputProps={{ style: { fontFamily: 'monospace', fontSize: '12px' } }}
             />
-            <Button variant="contained" onClick={handleApplyShader} fullWidth>
-              Apply Shader
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1, mb: 0 }}>
+              <Button variant="outlined" size="small" onClick={loadShaderTemplate} sx={{ flex: 1, fontSize: '0.7rem' }}>
+                Load Template
+              </Button>
+              <Button variant="contained" onClick={handleApplyShader} sx={{ flex: 2 }}>
+                Apply Shader
+              </Button>
+            </Box>
           </Box>
         ) : visualType === 'butterchurn' ? (
           <Box>
@@ -584,6 +600,44 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
                     sx={{ textTransform: 'capitalize', fontSize: '0.7rem' }}
                   >
                     {mode}
+                  </Button>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="body2" sx={{ mb: 1 }}>Volume Normalizer</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flex: 1 }}>
+                <input
+                  type="checkbox"
+                  checked={volumeNormalizer.enabled}
+                  onChange={(e) => setVolumeNormalizerEnabled(e.target.checked)}
+                />
+                <Typography variant="caption">Enabled</Typography>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={volumeNormalizer.showDebug}
+                  onChange={(e) => setVolumeNormalizerShowDebug(e.target.checked)}
+                />
+                <Typography variant="caption">Debug overlay</Typography>
+              </label>
+            </Box>
+            <Grid container spacing={1}>
+              {(['responsive', 'smooth', 'punchy'] as const).map((preset) => (
+                <Grid size={{ xs: 4 }} key={preset}>
+                  <Button
+                    fullWidth
+                    variant={volumeNormalizer.preset === preset ? 'contained' : 'outlined'}
+                    size="small"
+                    disabled={!volumeNormalizer.enabled}
+                    onClick={() => setVolumeNormalizerPreset(preset)}
+                    sx={{ textTransform: 'capitalize', fontSize: '0.7rem' }}
+                  >
+                    {preset}
                   </Button>
                 </Grid>
               ))}

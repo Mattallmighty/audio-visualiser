@@ -7,8 +7,16 @@ export interface VisualizerOption {
   category: string
 }
 
+export type VolumeNormalizerPreset = 'responsive' | 'smooth' | 'punchy'
+
+export interface VolumeNormalizerSettings {
+  preset: VolumeNormalizerPreset
+  enabled: boolean
+  showDebug: boolean
+}
+
 export interface StoreVisualizerState {
-  visualizers: VisualizerOption[]  
+  visualizers: VisualizerOption[]
   visualType: VisualisationType
   audioSource: 'backend' | 'mic' | 'system'
   autoChange: boolean
@@ -17,6 +25,7 @@ export interface StoreVisualizerState {
   whiteCircleFix: 'original' | 'energy' | 'clamp'
   outerGlowMode: 'original' | 'strengthened'
   textAutoFit: boolean
+  volumeNormalizer: VolumeNormalizerSettings
 }
 
 export interface StoreVisualizerActions {
@@ -29,12 +38,15 @@ export interface StoreVisualizerActions {
   setWhiteCircleFix: (mode: 'original' | 'energy' | 'clamp') => void
   setOuterGlowMode: (mode: 'original' | 'strengthened') => void
   setTextAutoFit: (enabled: boolean) => void
+  setVolumeNormalizerPreset: (preset: VolumeNormalizerPreset) => void
+  setVolumeNormalizerEnabled: (enabled: boolean) => void
+  setVolumeNormalizerShowDebug: (show: boolean) => void
 }
 
-const storeVisualizer = (set: any, get: any) => {
+const storeVisualizer = (set: any, _get: any) => {
   return {
     visualizers: ALL_VISUALIZERS_WITH_CATEGORIES || [],
-    
+
     // State
     visualType: 'butterchurn' as VisualisationType,
     audioSource: 'backend' as 'backend' | 'mic' | 'system',
@@ -44,6 +56,11 @@ const storeVisualizer = (set: any, get: any) => {
     whiteCircleFix: 'energy' as 'original' | 'energy' | 'clamp',
     outerGlowMode: 'strengthened' as 'original' | 'strengthened',
     textAutoFit: true,
+    volumeNormalizer: {
+      preset: 'responsive' as VolumeNormalizerPreset,
+      enabled: true,
+      showDebug: false,
+    },
 
     // Actions
     setVisualType: (type: VisualisationType) => set({ visualType: type }),
@@ -54,8 +71,14 @@ const storeVisualizer = (set: any, get: any) => {
     setGlobalSmoothing: (value: number) => set({ globalSmoothing: value }),
     setWhiteCircleFix: (mode: 'original' | 'energy' | 'clamp') => set({ whiteCircleFix: mode }),
     setOuterGlowMode: (mode: 'original' | 'strengthened') => set({ outerGlowMode: mode }),
-    setTextAutoFit: (enabled: boolean) => set({ textAutoFit: enabled })
-    }
+    setTextAutoFit: (enabled: boolean) => set({ textAutoFit: enabled }),
+    setVolumeNormalizerPreset: (preset: VolumeNormalizerPreset) =>
+      set((state: any) => ({ volumeNormalizer: { ...state.volumeNormalizer, preset } })),
+    setVolumeNormalizerEnabled: (enabled: boolean) =>
+      set((state: any) => ({ volumeNormalizer: { ...state.volumeNormalizer, enabled } })),
+    setVolumeNormalizerShowDebug: (show: boolean) =>
+      set((state: any) => ({ volumeNormalizer: { ...state.volumeNormalizer, showDebug: show } })),
+  }
 }
 
 export default storeVisualizer

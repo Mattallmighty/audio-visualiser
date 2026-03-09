@@ -13,6 +13,11 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Meyda from "meyda";
 import { BPMDetector, BPMResult } from "./BPMDetector";
 import { BuildUpDetector, BuildUpState } from "./BuildUpDetector";
+import {
+  VolumeNormalizerBank,
+  VolumeNormalizerBankOutput,
+} from "./VolumeNormalizerBank";
+import { useStore } from "../../store";
 
 // Note names for chroma
 const NOTE_NAMES = [
@@ -78,6 +83,11 @@ export interface AudioAnalyserData {
   energy: number; // 0-1, overall perceived energy (loudness + tempo + spectral complexity)
   valence: number; // 0-1, musical positiveness (major key, brightness, tempo)
   mood: "chill" | "ambient" | "upbeat" | "driving" | "intense" | "unknown"; // Simplified genre/mood
+
+  // Volume Normalization
+  volumeStream: number; // Accumulated animation time parameter (use instead of wall-clock time)
+  volumeIntensity: number; // Combined intensity multiplier for visual elements
+  volumeNormalized: number; // Raw normalized volume (0 = min, 1 = mean, unclamped)
 }
 
 export interface AudioAnalyserConfig {
@@ -138,7 +148,7 @@ function getDominantNote(chroma: number[]): {
  */
 function detectMajorMinor(
   chroma: number[],
-  rootIndex: number
+  rootIndex: number,
 ): { isMajor: boolean; confidence: number } {
   if (!chroma || chroma.length !== 12) {
     return { isMajor: true, confidence: 0 };
@@ -168,7 +178,7 @@ function calculateEnergy(
   bass: number,
   spectralFlux: number,
   bpm: number,
-  bpmConfidence: number
+  bpmConfidence: number,
 ): number {
   // Normalize BPM to 0-1 (60-180 BPM range)
   const normalizedBpm = Math.max(0, Math.min(1, (bpm - 60) / 120));
@@ -203,12 +213,12 @@ function calculateValence(
   dominantNoteIndex: number,
   spectralCentroid: number,
   bpm: number,
-  bpmConfidence: number
+  bpmConfidence: number,
 ): number {
   // Major key adds positivity
   const { isMajor, confidence: keyConfidence } = detectMajorMinor(
     chroma,
-    dominantNoteIndex
+    dominantNoteIndex,
   );
   const keyContrib = isMajor
     ? 0.6 + keyConfidence * 0.2
@@ -222,7 +232,7 @@ function calculateValence(
   // Normalize centroid (typical range 1000-8000 Hz)
   const brightnessContrib = Math.max(
     0,
-    Math.min(1, (spectralCentroid - 1000) / 7000)
+    Math.min(1, (spectralCentroid - 1000) / 7000),
   );
 
   // Weighted combination
@@ -238,7 +248,7 @@ function calculateValence(
 function determineMood(
   energy: number,
   valence: number,
-  spectralFlatness: number
+  spectralFlatness: number,
 ): "chill" | "ambient" | "upbeat" | "driving" | "intense" | "unknown" {
   // High noisiness suggests ambient/atmospheric
   const isAtmospheric = spectralFlatness > 0.3;
@@ -269,14 +279,14 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
       config.beatDecay,
       config.bpmMin,
       config.bpmMax,
-    ]
+    ],
   );
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [data, setData] = useState<AudioAnalyserData>({
     frequencyData: new Uint8Array(0),
     normalizedFrequency: new Float32Array(0),
@@ -306,6 +316,9 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
     energy: 0,
     valence: 0.5,
     mood: "unknown",
+    volumeStream: 0,
+    volumeIntensity: 0,
+    volumeNormalized: 0,
   });
 
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -318,6 +331,7 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
   // Detectors
   const bpmDetectorRef = useRef<BPMDetector | null>(null);
   const buildUpDetectorRef = useRef<BuildUpDetector | null>(null);
+  const volumeNormalizerRef = useRef<VolumeNormalizerBank | null>(null);
 
   // Beat detection state
   const beatIntensityRef = useRef<number>(0);
@@ -344,12 +358,23 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
     });
 
     buildUpDetectorRef.current = new BuildUpDetector();
+    volumeNormalizerRef.current = new VolumeNormalizerBank();
 
     return () => {
       bpmDetectorRef.current = null;
       buildUpDetectorRef.current = null;
+      volumeNormalizerRef.current = null;
     };
   }, [cfg.bpmMin, cfg.bpmMax, cfg.beatThreshold]);
+
+  // Sync volume normalizer settings from store
+  const volumeNormalizerSettings = useStore(state => state.volumeNormalizer);
+  useEffect(() => {
+    const bank = volumeNormalizerRef.current;
+    if (!bank) return;
+    bank.applyPreset(volumeNormalizerSettings.preset);
+    if (!volumeNormalizerSettings.enabled) bank.reset();
+  }, [volumeNormalizerSettings.preset, volumeNormalizerSettings.enabled]);
 
   useEffect(() => {
     processAudioRef.current = () => {
@@ -363,9 +388,16 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
 
       // Reuse typed arrays instead of creating new ones each frame
       // This prevents massive memory allocations that cause browser crashes
-      if (!frequencyDataRef.current || frequencyDataRef.current.length !== bufferLength) {
-        frequencyDataRef.current = new Uint8Array(bufferLength) as Uint8Array<ArrayBuffer>;
-        waveformDataRef.current = new Uint8Array(bufferLength) as Uint8Array<ArrayBuffer>;
+      if (
+        !frequencyDataRef.current ||
+        frequencyDataRef.current.length !== bufferLength
+      ) {
+        frequencyDataRef.current = new Uint8Array(
+          bufferLength,
+        ) as Uint8Array<ArrayBuffer>;
+        waveformDataRef.current = new Uint8Array(
+          bufferLength,
+        ) as Uint8Array<ArrayBuffer>;
         normalizedFreqRef.current = new Float32Array(bufferLength);
         waveArrayRef.current = new Float32Array(bufferLength);
         previousSpectrumRef.current = new Float32Array(bufferLength);
@@ -431,7 +463,7 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
             "spectralRolloff",
             "chroma",
           ],
-          waveArray as any
+          waveArray as any,
         );
         if (features) {
           rms = features.rms || 0;
@@ -445,6 +477,14 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
       }
 
       const overall = rms > 0 ? rms * 2 : (bass * 2 + mid + high * 0.5) / 3.5;
+
+      // Volume Normalization
+      const volumeNormalizer = volumeNormalizerRef.current;
+      const volEnabled = useStore.getState().volumeNormalizer.enabled;
+      const volumeResult: VolumeNormalizerBankOutput | null =
+        volumeNormalizer && volEnabled
+          ? volumeNormalizer.process(overall)
+          : null;
 
       // Calculate spectral flux (rate of change)
       let spectralFlux = 0;
@@ -488,7 +528,7 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
         bass,
         mid,
         high,
-        bpmResult.isBeat
+        bpmResult.isBeat,
       );
 
       // Note detection
@@ -502,14 +542,14 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
         bass,
         spectralFlux,
         bpmResult.bpm,
-        bpmResult.confidence
+        bpmResult.confidence,
       );
       const valence = calculateValence(
         chroma,
         dominantNoteIndex >= 0 ? dominantNoteIndex : 0,
         spectralCentroid,
         bpmResult.bpm,
-        bpmResult.confidence
+        bpmResult.confidence,
       );
       const mood = determineMood(energy, valence, spectralFlatness);
 
@@ -518,7 +558,7 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
       frameCounterRef.current++;
       if (frameCounterRef.current >= updateThrottle) {
         frameCounterRef.current = 0;
-        
+
         setData({
           frequencyData, // Uint8Array
           normalizedFrequency: normalizedFreq,
@@ -548,6 +588,9 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
           energy,
           valence,
           mood,
+          volumeStream: volumeResult?.combinedStream ?? 0,
+          volumeIntensity: volumeResult?.combinedIntensity ?? 0,
+          volumeNormalized: volumeResult?.medium.normalizedVolume ?? 0,
         });
       }
 
@@ -555,97 +598,109 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
     };
   }, [cfg.fftSize, cfg.beatDecay]);
 
-  const startListening = useCallback(async (deviceId?: string, useSystemAudio = false) => {
-    try {
-      setError(null);
+  const startListening = useCallback(
+    async (deviceId?: string, useSystemAudio = false) => {
+      try {
+        setError(null);
 
-      let stream: MediaStream;
+        let stream: MediaStream;
 
-      if (useSystemAudio) {
-        // Use getDisplayMedia for system audio (loopback)
-        try {
-          stream = await navigator.mediaDevices.getDisplayMedia({
-            video: {
-              displaySurface: 'browser',
-            } as any,
-            audio: {
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-              suppressLocalAudioPlayback: false,
-            } as any,
-            preferCurrentTab: false,
-            selfBrowserSurface: 'exclude',
-            systemAudio: 'include',
-          } as any);
+        if (useSystemAudio) {
+          // Use getDisplayMedia for system audio (loopback)
+          try {
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: {
+                displaySurface: "browser",
+              } as any,
+              audio: {
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false,
+                suppressLocalAudioPlayback: false,
+              } as any,
+              preferCurrentTab: false,
+              selfBrowserSurface: "exclude",
+              systemAudio: "include",
+            } as any);
 
-          // Stop video tracks immediately if any (we only want audio)
-          stream.getVideoTracks().forEach(track => track.stop());
+            // Stop video tracks immediately if any (we only want audio)
+            stream.getVideoTracks().forEach((track) => track.stop());
 
-          // Check if we actually got audio
-          if (stream.getAudioTracks().length === 0) {
-            throw new Error('No audio track in the screen share. Please select "Share audio" when prompted.');
+            // Check if we actually got audio
+            if (stream.getAudioTracks().length === 0) {
+              throw new Error(
+                'No audio track in the screen share. Please select "Share audio" when prompted.',
+              );
+            }
+          } catch (err: any) {
+            if (
+              err.name === "NotAllowedError" ||
+              err.name === "PermissionDeniedError"
+            ) {
+              throw new Error(
+                "Screen share permission denied. Please allow screen sharing to capture system audio.",
+              );
+            }
+            throw err;
           }
-        } catch (err: any) {
-          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-            throw new Error('Screen share permission denied. Please allow screen sharing to capture system audio.');
+        } else {
+          // Use provided deviceId or fall back to selectedDeviceId state
+          const targetDeviceId = deviceId || selectedDeviceId;
+
+          // Request microphone access
+          const audioConstraints: MediaTrackConstraints = {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          };
+
+          // Use specific device if available
+          if (targetDeviceId) {
+            audioConstraints.deviceId = { exact: targetDeviceId };
           }
-          throw err;
-        }
-      } else {
-        // Use provided deviceId or fall back to selectedDeviceId state
-        const targetDeviceId = deviceId || selectedDeviceId;
 
-        // Request microphone access
-        const audioConstraints: MediaTrackConstraints = {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        };
-
-        // Use specific device if available
-        if (targetDeviceId) {
-          audioConstraints.deviceId = { exact: targetDeviceId };
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: audioConstraints,
+          });
         }
 
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: audioConstraints,
-        });
+        streamRef.current = stream;
+
+        // Create audio context
+        const audioContext = new (
+          window.AudioContext || (window as any).webkitAudioContext
+        )();
+        audioContextRef.current = audioContext;
+
+        // Create analyser node
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = cfg.fftSize;
+        analyser.smoothingTimeConstant = cfg.smoothingTimeConstant;
+        analyser.minDecibels = cfg.minDecibels;
+        analyser.maxDecibels = cfg.maxDecibels;
+        analyserRef.current = analyser;
+
+        // Connect source to analyser
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+        sourceRef.current = source;
+
+        // Reset detectors
+        bpmDetectorRef.current?.reset();
+        buildUpDetectorRef.current?.reset();
+        volumeNormalizerRef.current?.reset();
+
+        // Start processing
+        setIsInitialized(true);
+        setIsListening(true);
+        processAudioRef.current();
+      } catch (err: any) {
+        console.error("Failed to start audio analyser:", err);
+        setError(err.message || "Failed to access microphone");
       }
-
-      streamRef.current = stream;
-
-      // Create audio context
-      const audioContext = new (window.AudioContext ||
-        (window as any).webkitAudioContext)();
-      audioContextRef.current = audioContext;
-
-      // Create analyser node
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = cfg.fftSize;
-      analyser.smoothingTimeConstant = cfg.smoothingTimeConstant;
-      analyser.minDecibels = cfg.minDecibels;
-      analyser.maxDecibels = cfg.maxDecibels;
-      analyserRef.current = analyser;
-
-      // Connect source to analyser
-      const source = audioContext.createMediaStreamSource(stream);
-      source.connect(analyser);
-      sourceRef.current = source;
-
-      // Reset detectors
-      bpmDetectorRef.current?.reset();
-      buildUpDetectorRef.current?.reset();
-
-      // Start processing
-      setIsInitialized(true);
-      setIsListening(true);
-      processAudioRef.current();
-    } catch (err: any) {
-      console.error("Failed to start audio analyser:", err);
-      setError(err.message || "Failed to access microphone");
-    }
-  }, [cfg, selectedDeviceId]);
+    },
+    [cfg, selectedDeviceId],
+  );
 
   const stopListening = useCallback(() => {
     // Stop animation
@@ -679,6 +734,7 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
     beatIntensityRef.current = 0;
     peakEnergyRef.current = 0;
     previousSpectrumRef.current = null;
+    volumeNormalizerRef.current?.reset();
 
     // Clear reusable arrays to free memory
     frequencyDataRef.current = null;
@@ -691,31 +747,36 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
   const enumerateDevices = useCallback(async () => {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      const audioInputs = devices.filter(device => device.kind === 'audioinput');
+      const audioInputs = devices.filter(
+        (device) => device.kind === "audioinput",
+      );
       setAudioDevices(audioInputs);
-      
+
       // Set default device if none selected
       if (!selectedDeviceId && audioInputs.length > 0) {
         setSelectedDeviceId(audioInputs[0].deviceId);
       }
-      
+
       return audioInputs;
     } catch (err) {
-      console.error('Failed to enumerate devices:', err);
+      console.error("Failed to enumerate devices:", err);
       return [];
     }
   }, [selectedDeviceId]);
 
   // Change audio input device
-  const changeDevice = useCallback(async (deviceId: string) => {
-    setSelectedDeviceId(deviceId);
-    
-    // If currently listening, restart with new device
-    if (isListening) {
-      stopListening();
-      await startListening(deviceId);
-    }
-  }, [isListening, stopListening, startListening]);
+  const changeDevice = useCallback(
+    async (deviceId: string) => {
+      setSelectedDeviceId(deviceId);
+
+      // If currently listening, restart with new device
+      if (isListening) {
+        stopListening();
+        await startListening(deviceId);
+      }
+    },
+    [isListening, stopListening, startListening],
+  );
 
   // Tap tempo function
   const tapTempo = useCallback(() => {
@@ -730,16 +791,19 @@ export function useAudioAnalyser(config: AudioAnalyserConfig = EMPTY_CONFIG) {
   // Enumerate devices on mount
   useEffect(() => {
     enumerateDevices();
-    
+
     // Listen for device changes
     const handleDeviceChange = () => {
       enumerateDevices();
     };
-    
-    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
-    
+
+    navigator.mediaDevices.addEventListener("devicechange", handleDeviceChange);
+
     return () => {
-      navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+      navigator.mediaDevices.removeEventListener(
+        "devicechange",
+        handleDeviceChange,
+      );
     };
   }, [enumerateDevices]);
 

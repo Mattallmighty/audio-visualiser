@@ -67,7 +67,7 @@ const gaussianBlurFragmentShader = `
   }
 `
 
-// Blend shader - combines bloom with original
+// Blend shader - combines bloom with original + ACES tone mapping
 const blendFragmentShader = `
   precision highp float;
 
@@ -75,8 +75,19 @@ const blendFragmentShader = `
   uniform sampler2D bloomTexture;
   uniform float intensity;
   uniform int blendMode; // 0 = add, 1 = screen
+  uniform int toneMap;   // 0 = none, 1 = ACES
 
   varying vec2 v_uv;
+
+  // ACES fitted tone mapping (Stephen Hill's approximation)
+  vec3 acesToneMap(vec3 x) {
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+  }
 
   void main() {
     vec4 original = texture2D(inputTexture, v_uv);
@@ -84,11 +95,14 @@ const blendFragmentShader = `
 
     vec3 result;
     if (blendMode == 0) {
-      // Additive blend
       result = original.rgb + bloom.rgb * intensity;
     } else {
-      // Screen blend
       result = 1.0 - (1.0 - original.rgb) * (1.0 - bloom.rgb * intensity);
+    }
+
+    // Optional ACES tone mapping for HDR-to-SDR display
+    if (toneMap == 1) {
+      result = acesToneMap(result);
     }
 
     gl_FragColor = vec4(result, original.a);
@@ -100,6 +114,7 @@ export interface BloomConfig {
   intensity?: number
   radius?: number
   blendMode?: 'add' | 'screen'
+  toneMapping?: boolean
 }
 
 export class BloomPass extends ShaderPass {
@@ -122,6 +137,7 @@ export class BloomPass extends ShaderPass {
   private _intensity: number
   private _radius: number
   private _blendMode: 'add' | 'screen'
+  private _toneMapping: boolean
 
   constructor(config: BloomConfig = {}) {
     // Create a dummy shader for the parent - we override render()
@@ -138,6 +154,7 @@ export class BloomPass extends ShaderPass {
     this._intensity = config.intensity ?? 0.5
     this._radius = config.radius ?? 4
     this._blendMode = config.blendMode ?? 'add'
+    this._toneMapping = config.toneMapping ?? true
 
     // Create internal passes
     this.luminancePass = new ShaderPass({
@@ -175,7 +192,8 @@ export class BloomPass extends ShaderPass {
         inputTexture: { type: 't', value: null },
         bloomTexture: { type: 't', value: null },
         intensity: { type: 'f', value: this._intensity },
-        blendMode: { type: 'i', value: 0 }
+        blendMode: { type: 'i', value: 0 },
+        toneMap: { type: 'i', value: this._toneMapping ? 1 : 0 }
       },
       vertexShader: fullscreenVertexShader,
       fragmentShader: blendFragmentShader
@@ -294,7 +312,8 @@ export class BloomPass extends ShaderPass {
       inputTexture: 0,
       bloomTexture: 1,
       intensity: this._intensity,
-      blendMode: this._blendMode === 'add' ? 0 : 1
+      blendMode: this._blendMode === 'add' ? 0 : 1,
+      toneMap: this._toneMapping ? 1 : 0
     })
 
     // Render to output
@@ -341,6 +360,7 @@ export class BloomPass extends ShaderPass {
     if (config.intensity !== undefined) this.intensity = config.intensity
     if (config.radius !== undefined) this.radius = config.radius
     if (config.blendMode !== undefined) this.blendMode = config.blendMode
+    if (config.toneMapping !== undefined) this._toneMapping = config.toneMapping
   }
 
   dispose(): void {
